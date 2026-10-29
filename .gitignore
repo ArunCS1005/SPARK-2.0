@@ -1,0 +1,25 @@
+# Secrets and local settings
+.env
+*.env.local
+
+# Throwaway experiments
+spike/
+
+# Runtime data (normally lives outside the repo in SPARK_DATA)
+data/
+backups/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

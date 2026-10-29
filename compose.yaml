@@ -1,0 +1,135 @@
+# SPARK core stack. Settings come from .env (copy .env.example); add-ons are compose profiles.
+# Conventions and the startup order are in docs/development.md.
+name: spark
+
+x-logging: &logging
+  # Cap Docker's log files so a chatty container can never fill the laptop's disk.
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-env: &env
+  env_file:
+    - path: .env
+      required: false
+
+x-cli: &cli
+  <<: *env
+  image: spark-cli:local
+  build:
+    context: ./tools/spark-cli
+    target: cli
+  logging: *logging
+
+services:
+  # Runs `spark init` before Cosmos on every `up`: creates the data folders and makes sure Cosmos
+  # only ever starts with a config that disables its machine-wide pruning. No Docker socket.
+  init:
+    <<: *cli
+    command: ["init"]
+    restart: "no"
+    volumes:
+      - cosmos-config:/volumes/cosmos-config
+      - filebrowser-data:/volumes/filebrowser-data
+      - ${SPARK_DATA:?Set SPARK_DATA in .env}:/data
+      - ./config:/app/config:ro
+
+  cosmos:
+    image: azukaar/cosmos-server:${COSMOS_VERSION:-0.23.4}
+    restart: unless-stopped
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    environment:
+      # Without this Cosmos picks its config folder by inspecting its own container and falls back
+      # to an unpersisted folder when that fails. Never set `hostname:` on this service.
+      COSMOS_CONFIG_FOLDER: /config/
+      TZ: ${TZ:-UTC}
+    ports:
+      - "${SPARK_HTTP_BIND:-127.0.0.1}:${SPARK_HTTP_PORT:-8080}:80"
+    volumes:
+      - cosmos-config:/config
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Dashboard metrics (CPU, RAM, network, temperatures) read these. Read-only, and only these:
+      # SPARK never mounts the host's root filesystem.
+      - /proc:/mnt/host/proc:ro
+      - /sys:/mnt/host/sys:ro
+    networks:
+      default:
+        aliases:
+          # OpenID clients (FileBrowser) reach Cosmos's issuer http://SPARK_HOSTNAME inside Docker.
+          - ${SPARK_HOSTNAME:-spark.invalid}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost/cosmos-ui/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging: *logging
+
+  filebrowser:
+    image: gtstef/filebrowser:${FILEBROWSER_VERSION:-2.0.2-stable}
+    restart: unless-stopped
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      cosmos:
+        # FileBrowser exits when Cosmos's OpenID discovery does not answer at startup.
+        condition: service_healthy
+    environment:
+      FILEBROWSER_CONFIG: /home/filebrowser/data/config.yaml
+      TZ: ${TZ:-UTC}
+    volumes:
+      - filebrowser-data:/home/filebrowser/data
+      - ${SPARK_DATA}/users:/srv/users
+      - ${SPARK_DATA}/shared:/srv/shared:ro
+      # The same folder, writable, for admins (FileBrowser source "SharedAdmin").
+      - ${SPARK_DATA}/shared:/srv/shared-admin
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:80/files/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging: *logging
+
+  # On-demand admin CLI: docker compose run --rm spark <command>
+  spark:
+    <<: *cli
+    profiles: [cli]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - spark-state:/state
+      - cosmos-config:/volumes/cosmos-config
+      - filebrowser-data:/volumes/filebrowser-data
+      - ${SPARK_DATA}:/data
+      - ./config:/app/config:ro
+
+  tunnel:
+    image: cloudflare/cloudflared:${CLOUDFLARED_VERSION:-2026.10.0}
+    profiles: [tunnel]
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    depends_on:
+      cosmos:
+        condition: service_healthy
+    logging: *logging
+
+  # Testing only: a random https://<name>.trycloudflare.com that changes on every restart.
+  quick-tunnel:
+    image: cloudflare/cloudflared:${CLOUDFLARED_VERSION:-2026.10.0}
+    profiles: [quick-tunnel]
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "--url", "http://cosmos:80"]
+    depends_on:
+      cosmos:
+        condition: service_healthy
+    logging: *logging
+
+volumes:
+  cosmos-config:
+  filebrowser-data:
+  spark-state:

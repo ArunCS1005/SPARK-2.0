@@ -1,0 +1,11 @@
+# Override for tests/smoke/run.sh: settings from the generated env file, no published port (the
+# checks run inside the project network), and the flow script mounted into the CLI container.
+services:
+  init:
+    env_file: ["${SMOKE_ENV:?run tests/smoke/run.sh}"]
+  spark:
+    env_file: ["${SMOKE_ENV:?run tests/smoke/run.sh}"]
+    volumes:
+      - ./tests/smoke:/smoke:ro
+  cosmos:
+    ports: !reset []

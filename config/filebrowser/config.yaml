@@ -1,0 +1,112 @@
+# FileBrowser Quantum v2.0.2-stable (gtstef/filebrowser:2.0.2-stable) for SPARK.
+# Facts and sources: docs/research/filebrowser-quantum.md
+#
+# Placeholders:
+#   ${SPARK_HOSTNAME}         public hostname only, no scheme/port (spark.example.com)
+#   ${SPARK_PUBLIC_URL}       how browsers reach it: https://spark.example.com, or
+#                             http://spark.localhost for a laptop-only install
+#   ${FB_OIDC_CLIENT_SECRET}  plaintext secret of the Cosmos OpenID client "filebrowser"
+#   ${SPARK_ADMIN_USERNAME}   Cosmos username of the owner (admin)
+#
+# Two ways to fill them, both work with this exact file:
+#   1. SPARK substitutes them at setup time.
+#   2. Mount this file unchanged and give the container the same names as env vars.
+#      FileBrowser itself expands environment references in every string value after
+#      parsing the YAML; unset variables become empty strings.
+# Either way: no other dollar sign may appear in any value (secrets included). The
+# comments contain none either, so a strict renderer only ever sees the four names
+# above. Substituted values must not contain double quotes or backslashes. The
+# container env var FILEBROWSER_OIDC_CLIENT_SECRET overrides clientSecret below if it
+# is set.
+#
+# Container: listens on :80, runs as uid 1000. FILEBROWSER_CONFIG sets the path of this
+# file. The database is FILEBROWSER_DATABASE_PATH, by default
+# /home/filebrowser/data/database.sqlite (put the named volume on /home/filebrowser/data).
+# Healthcheck: curl -fsS http://localhost:80/files/health
+
+server:
+  disableUpdateCheck: true # versions are pinned: no GitHub polling, no "update available" banner
+  sources:
+    # Guests and admins: own folder /srv/users/<username>, created at first login.
+    - path: /srv/users
+      name: Home
+      config:
+        defaultEnabled: true # every new user (including OIDC auto-created ones) gets this source
+        createUserDir: true # user scope = defaultUserScope + username, i.e. /<username>
+        defaultUserScope: /
+        # 2.0.2 has ONE global permission template for new users. It is taken from the first
+        # source that sets defaultPermissions and is applied to every source. Shared can
+        # therefore only be made read-only with readOnly below.
+        defaultPermissions:
+          view: true
+          download: true
+          create: true
+          modify: true
+          delete: true
+    # Read-only for EVERYONE, admins included: readOnly is not checked per user.
+    - path: /srv/shared
+      name: Shared
+      config:
+        defaultEnabled: true
+        readOnly: true
+    # Write access to Shared for admins: mount the same host folder a second time at
+    # /srv/shared-admin. No user gets this source automatically. Grant it to each admin once
+    # (Settings > User management, or PATCH /files/api/users). Leave it out of the compose
+    # mounts and this config if admins add files to SPARK_DATA/shared on the laptop instead.
+    - path: /srv/shared-admin
+      name: SharedAdmin
+      config:
+        defaultEnabled: false
+
+http:
+  port: 80
+  baseURL: /files # every route lives under /files/ (api, public shares, static, health)
+  # Base for share links. It must end in /files: FileBrowser removes the baseURL suffix and
+  # adds it back, so a value without /files gives https://host//files/... links.
+  externalUrl: "${SPARK_PUBLIC_URL}/files"
+  # Trust X-Forwarded-Host/-Proto/-For from Cosmos. The OIDC redirect_uri and the Secure flag
+  # on cookies come from these headers, never from externalUrl. Cosmos (HTTP-only mode) sends
+  # X-Forwarded-Proto: http unless its /files route sets the extra header
+  # X-Forwarded-Proto: https.
+  trustProxyHeaders: true
+  disableWebDAV: true # not used by SPARK; one less authenticated surface under /files/dav
+
+auth:
+  # On every FileBrowser start, the user with this name gets share + api permissions if they
+  # are already an admin. This user is the only admin given the share permission without a
+  # manual step.
+  adminUsername: "${SPARK_ADMIN_USERNAME}"
+  tokenExpirationHours: 2 # default; an open tab renews its session automatically
+  methods:
+    password:
+      enabled: false # OIDC only: no password form, POST /files/api/auth/login is refused
+    oidc:
+      enabled: true
+      clientId: filebrowser
+      clientSecret: "${FB_OIDC_CLIENT_SECRET}"
+      # Must equal the "issuer" in Cosmos's discovery document exactly (http, no trailing
+      # slash). FileBrowser fetches it at startup, and the server and CLI exit if this fails.
+      issuerUrl: "http://${SPARK_HOSTNAME}"
+      scopes: "openid email profile" # Cosmos adds the role claim regardless of scope
+      userIdentifier: preferred_username # = Cosmos username = home folder name
+      groupsClaim: role # Cosmos sends role: "admin" | "user"; a plain string is accepted
+      adminGroup: admin # role "admin" makes the user a FileBrowser admin (promotion only)
+      # Cosmos's advertised end_session_endpoint, meant to end the Cosmos session too when
+      # someone logs out of Files (not yet tested against real Cosmos).
+      logoutRedirectUrl: "${SPARK_PUBLIC_URL}/cosmos-ui/logout"
+
+frontend:
+  name: SPARK Files
+  oidcLoginButtonText: Sign in with SPARK
+
+userDefaults: # applied when a user is created, including OIDC auto-creation
+  fileLoading:
+    # Uploads go through Cloudflare (100 MB per request). The web UI sends files larger than
+    # this in chunks of this size. Keep it at 50 or below.
+    uploadChunkSizeMb: 10
+  account:
+    permissions:
+      admin: false # admin comes from the role claim (adminGroup), not from here
+      share: false # guests cannot create share links
+      api: false
+      realtime: false

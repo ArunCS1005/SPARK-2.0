@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: CLI unit tests and lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --target dev -t spark-cli-dev tools/spark-cli
+      - run: docker run --rm -v "$PWD:/repo" spark-cli-dev
+      - run: docker run --rm -v "$PWD:/repo" spark-cli-dev ruff format --check src tests
+
+  compose:
+    name: Compose files
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Every profile combination renders
+        run: |
+          cp .env.example .env
+          for profiles in "" tunnel quick-tunnel cli "tunnel,cli" "quick-tunnel,cli"; do
+            echo "COMPOSE_PROFILES=$profiles"
+            COMPOSE_PROFILES=$profiles docker compose config --quiet
+          done
+          SMOKE_ENV=.env docker compose -f compose.yaml -f tests/smoke/compose.smoke.yaml config --quiet
+
+  shellcheck:
+    name: Shell scripts
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker run --rm -v "$PWD:/mnt:ro" koalaman/shellcheck:v0.10.0 /mnt/scripts/*.sh /mnt/tests/smoke/run.sh
+
+  smoke:
+    name: End-to-end smoke test
+    runs-on: ubuntu-24.04
+    needs: [unit, compose]
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose version
+      - run: tests/smoke/run.sh

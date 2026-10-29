@@ -1,0 +1,227 @@
+{
+  "LoggingLevel": "INFO",
+  "Database": {
+    "PostgresHost": "",
+    "PostgresDatabase": "",
+    "PostgresUsername": "",
+    "PostgresPassword": "",
+    "NodeName": ""
+  },
+  "DisableUserManagement": false,
+  "NewInstall": true,
+  "HTTPConfig": {
+    "CACert": "",
+    "CAPrivateKey": "",
+    "TLSCert": "",
+    "TLSKey": "",
+    "TLSKeyHostsCached": null,
+    "TLSValidUntil": "0001-01-01T00:00:00Z",
+    "SelfTLSCert": "",
+    "SelfTLSKey": "",
+    "SelfTLSKeyHostsCached": [
+      "0.0.0.0"
+    ],
+    "SelfTLSValidUntil": "0001-01-01T00:00:00Z",
+    "AuthPrivateKey": "",
+    "AuthPublicKey": "",
+    "GenerateMissingAuthCert": true,
+    "HTTPSCertificateMode": "DISABLED",
+    "DNSChallengeProvider": "",
+    "DisablePropagationChecks": false,
+    "DNSChallengePropagationWait": 30,
+    "ForceHTTPSCertificateRenewal": false,
+    "HTTPPort": "80",
+    "HTTPSPort": "443",
+    "ProxyConfig": {
+      "Routes": []
+    },
+    "Hostname": "0.0.0.0",
+    "AllowHTTPLocalIPAccess": false,
+    "SSLEmail": "",
+    "UseWildcardCertificate": false,
+    "OverrideWildcardDomains": "",
+    "AcceptAllInsecureHostname": false,
+    "DNSChallengeResolvers": "",
+    "UseForwardedFor": false,
+    "AllowSearchEngine": false,
+    "PublishMDNS": true,
+    "TrustedProxies": null
+  },
+  "EmailConfig": {
+    "Enabled": false,
+    "Host": "",
+    "Port": "",
+    "Username": "",
+    "Password": "",
+    "From": "",
+    "UseTLS": false,
+    "AllowInsecureTLS": false,
+    "NotifyLogin": false
+  },
+  "DockerConfig": {
+    "SkipPruneNetwork": false,
+    "SkipPruneImages": false,
+    "DefaultDataPath": "/cosmos-storage"
+  },
+  "BlockedCountries": [],
+  "CountryBlacklistIsWhitelist": false,
+  "ServerCountry": "",
+  "RequireMFA": false,
+  "AutoUpdate": true,
+  "BetaUpdates": false,
+  "OpenIDClients": null,
+  "MarketConfig": {
+    "Sources": []
+  },
+  "HomepageConfig": {
+    "Background": "",
+    "Widgets": null,
+    "Expanded": false
+  },
+  "ThemeConfig": {
+    "PrimaryColor": "",
+    "SecondaryColor": ""
+  },
+  "ConstellationConfig": {
+    "Enabled": false,
+    "DoNotSyncNodes": false,
+    "DNSDisabled": false,
+    "DNSPort": "",
+    "DNSFallback": "8.8.8.8:53",
+    "DNSBlockBlacklist": false,
+    "DNSAdditionalBlocklists": [
+      "https://s3.amazonaws.com/lists.disconnect.me/simple_tracking.txt",
+      "https://s3.amazonaws.com/lists.disconnect.me/simple_ad.txt",
+      "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts",
+      "https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/fakenews-only/hosts"
+    ],
+    "CustomDNSEntries": null,
+    "Tunnels": null,
+    "FirewallBlockedClients": null,
+    "OverrideNebulaExitNodeInterface": "",
+    "ThisDeviceName": "",
+    "ConstellationHostname": "",
+    "IPRange": ""
+  },
+  "MonitoringDisabled": false,
+  "MonitoringAlerts": {
+    "Anti Crypto-Miner": {
+      "Name": "Anti Crypto-Miner",
+      "Enabled": false,
+      "Period": "daily",
+      "TrackingMetric": "cosmos.system.docker.cpu.*",
+      "Condition": {
+        "Operator": "gt",
+        "Value": 80,
+        "Percent": false
+      },
+      "Actions": [
+        {
+          "Type": "notification",
+          "Target": ""
+        },
+        {
+          "Type": "email",
+          "Target": ""
+        },
+        {
+          "Type": "stop",
+          "Target": ""
+        }
+      ],
+      "LastTriggered": "0001-01-01T00:00:00Z",
+      "Throttled": false,
+      "Severity": "warn"
+    },
+    "Anti Memory Leak": {
+      "Name": "Anti Memory Leak",
+      "Enabled": false,
+      "Period": "daily",
+      "TrackingMetric": "cosmos.system.docker.ram.*",
+      "Condition": {
+        "Operator": "gt",
+        "Value": 80,
+        "Percent": true
+      },
+      "Actions": [
+        {
+          "Type": "notification",
+          "Target": ""
+        },
+        {
+          "Type": "email",
+          "Target": ""
+        },
+        {
+          "Type": "stop",
+          "Target": ""
+        }
+      ],
+      "LastTriggered": "0001-01-01T00:00:00Z",
+      "Throttled": false,
+      "Severity": "warn"
+    },
+    "Disk Full Notification": {
+      "Name": "Disk Full Notification",
+      "Enabled": true,
+      "Period": "latest",
+      "TrackingMetric": "cosmos.system.disk./",
+      "Condition": {
+        "Operator": "gt",
+        "Value": 95,
+        "Percent": true
+      },
+      "Actions": [
+        {
+          "Type": "notification",
+          "Target": ""
+        }
+      ],
+      "LastTriggered": "0001-01-01T00:00:00Z",
+      "Throttled": true,
+      "Severity": "warn"
+    },
+    "Disk Health": {
+      "Name": "Disk Health",
+      "Enabled": true,
+      "Period": "latest",
+      "TrackingMetric": "system.disk-health.temperature.*",
+      "Condition": {
+        "Operator": "gt",
+        "Value": 50,
+        "Percent": false
+      },
+      "Actions": [
+        {
+          "Type": "notification",
+          "Target": ""
+        }
+      ],
+      "LastTriggered": "0001-01-01T00:00:00Z",
+      "Throttled": true,
+      "Severity": "warn"
+    }
+  },
+  "BackupOutputDir": "",
+  "IncrBackupOutputDir": "",
+  "DisableHostModeWarning": false,
+  "AdminWhitelistIPs": null,
+  "AdminConstellationOnly": false,
+  "Storage": {
+    "SnapRAIDs": null
+  },
+  "CRON": null,
+  "Licence": "",
+  "ServerToken": "",
+  "AgentMode": false,
+  "RemoteStorage": {
+    "Shares": null
+  },
+  "DisableOpenIDDirect": false,
+  "Backup": {
+    "Disable": false,
+    "Backups": null
+  },
+  "Mpdu_": "",
+  "Mpdn_": ""
+}
