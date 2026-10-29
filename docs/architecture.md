@@ -142,6 +142,7 @@ sequenceDiagram
     S->>C: config, /files route, OpenID client for FileBrowser
     S->>C: restart (loads the new OpenID client)
     S->>F: write config, restart
+    S->>F: owner's Files account: share right, SharedAdmin (admin API, service token)
     I->>T: docker compose up -d (tunnel starts last)
     I->>S: spark doctor
 ```

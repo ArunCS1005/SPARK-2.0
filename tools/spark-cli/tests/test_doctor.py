@@ -63,7 +63,11 @@ def install(make_settings):
 
     template = (settings.config_dir / "filebrowser" / "config.yaml").read_text(encoding="utf-8")
     text = filebrowser.render_config(
-        template, hostname=HOST, client_secret="s3cret", admin_username="arun"
+        template,
+        hostname=HOST,
+        client_secret="s3cret",
+        admin_username="arun",
+        automation_secret="auto-s3cret",
     )
     filebrowser.write_config(settings.volumes_dir, text)
     for name in ("users", "shared", "backups"):

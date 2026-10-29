@@ -1,10 +1,23 @@
-"""FileBrowser Quantum config: rendering config/filebrowser/config.yaml and writing it into the
-filebrowser-data volume, where FileBrowser reads it (FILEBROWSER_CONFIG)."""
+"""FileBrowser Quantum: rendering config/filebrowser/config.yaml into the filebrowser-data volume
+(FILEBROWSER_CONFIG), and a small admin API client.
 
+The client signs in through FileBrowser's JWT method (auth.methods.jwt in the template): an HS256
+token with `sub` = SERVICE_USER and `groups` = [AUTOMATION_GROUP] makes FileBrowser create or reuse
+that admin user (internal/web/auth.go SetupJwtUser, internal/auth/jwt.go VerifyExternalJWT)."""
+
+import base64
 import contextlib
+import hashlib
+import hmac
+import json
 import os
 import re
+import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
+
+import httpx
 
 from spark_cli.errors import SparkError
 from spark_cli.settings import public_url
@@ -15,8 +28,12 @@ PLACEHOLDERS = (
     "SPARK_PUBLIC_URL",
     "FB_OIDC_CLIENT_SECRET",
     "SPARK_ADMIN_USERNAME",
+    "FB_AUTOMATION_SECRET",
 )
 FILEBROWSER_UID = 1000  # the image's user
+SERVICE_USER = "spark-cli"  # not a possible Cosmos name (letters and digits only)
+AUTOMATION_GROUP = "spark-automation"
+TOKEN_SECONDS = 300
 
 _PLACEHOLDER = re.compile(r"\$\{([^}]*)\}")
 # Values end up inside double-quoted YAML strings, and FileBrowser expands $ references itself.
@@ -27,12 +44,20 @@ def redirect_uri(hostname: str) -> str:
     return f"{public_url(hostname)}/files/api/auth/oidc/callback"
 
 
-def render_config(template: str, *, hostname: str, client_secret: str, admin_username: str) -> str:
+def render_config(
+    template: str,
+    *,
+    hostname: str,
+    client_secret: str,
+    admin_username: str,
+    automation_secret: str,
+) -> str:
     values = {
         "SPARK_HOSTNAME": hostname,
         "SPARK_PUBLIC_URL": public_url(hostname),
         "FB_OIDC_CLIENT_SECRET": client_secret,
         "SPARK_ADMIN_USERNAME": admin_username,
+        "FB_AUTOMATION_SECRET": automation_secret,
     }
     for name, value in values.items():
         if not value or any(c in value for c in _FORBIDDEN):
@@ -80,3 +105,77 @@ def _give_to_filebrowser(path: Path) -> None:
     if hasattr(os, "geteuid") and os.geteuid() == 0:
         with contextlib.suppress(OSError):
             os.chown(path, FILEBROWSER_UID, FILEBROWSER_UID)
+
+
+def automation_token(secret: str, now: float | None = None) -> str:
+    """A short-lived HS256 JWT for the service user (standard library only)."""
+    issued = int(time.time() if now is None else now)
+    claims = {
+        "sub": SERVICE_USER,
+        "groups": [AUTOMATION_GROUP],
+        "iat": issued,
+        "exp": issued + TOKEN_SECONDS,
+    }
+    head = _b64(json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode())
+    body = _b64(json.dumps(claims, separators=(",", ":")).encode())
+    signature = hmac.new(secret.encode(), f"{head}.{body}".encode(), hashlib.sha256).digest()
+    return f"{head}.{body}.{_b64(signature)}"
+
+
+def _b64(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+
+class FileBrowserClient:
+    """Admin calls to FileBrowser inside the project network (no Cosmos in between)."""
+
+    def __init__(self, http: httpx.Client, secret: str):
+        self.http = http
+        self.secret = secret
+
+    @classmethod
+    def from_settings(cls, settings, secret: str) -> "FileBrowserClient":
+        return cls(httpx.Client(base_url=settings.filebrowser_url, timeout=30), secret)
+
+    def _call(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
+        headers = {"X-JWT-Assertion": automation_token(self.secret)}
+        try:
+            response = self.http.request(method, path, headers=headers, **kwargs)
+        except httpx.TransportError as exc:
+            raise SparkError(
+                f"Cannot reach FileBrowser ({exc.__class__.__name__}).",
+                hint="Is it running? docker compose ps filebrowser",
+            ) from exc
+        if response.status_code >= 400 and response.status_code != 404:
+            raise SparkError(
+                f"FileBrowser {method} {path} failed: {response.status_code} {response.text[:200]}"
+            )
+        return response
+
+    def wait_until_up(
+        self, attempts: int = 45, *, sleep: Callable[[float], None] = time.sleep
+    ) -> bool:
+        """True once /files/health answers; False after `attempts` tries 2 s apart."""
+        for attempt in range(attempts):
+            try:
+                if self.http.get("/files/health").status_code == 200:
+                    return True
+            except httpx.TransportError:
+                pass
+            if attempt + 1 < attempts:
+                sleep(2)
+        return False
+
+    def get_user(self, username: str) -> dict | None:
+        response = self._call("GET", "/files/api/users", params={"username": username})
+        return None if response.status_code == 404 else response.json()
+
+    def create_user(self, username: str, *, login_method: str, scopes: list[dict]) -> None:
+        """FileBrowser applies userDefaults to new users (permissions included), so rights are
+        set afterwards with update_user (state.CreateUser -> settings.ApplyUserDefaultsFrom)."""
+        data = {"username": username, "loginMethod": login_method, "scopes": scopes}
+        self._call("POST", "/files/api/users", json={"which": [], "data": data})
+
+    def update_user(self, username: str, fields: dict[str, Any]) -> None:
+        payload = {"which": sorted(fields), "data": fields}
+        self._call("PATCH", "/files/api/users", params={"username": username}, json=payload)

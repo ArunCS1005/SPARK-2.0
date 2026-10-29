@@ -175,10 +175,18 @@ Found and fixed on the way: Cosmos loads OpenID clients only when its web server
 now restarts Cosmos after registering the FileBrowser client; FileBrowser could not create its
 database in a volume first mounted by `init`; the `/files` route was rewritten on every setup run.
 
-Known gaps: the owner gets FileBrowser's share right only at the next FileBrowser start after their
-first sign-in (`auth.adminUsername` is applied at start). Not yet tested through Cloudflare: the
-100 MB per-request limit, HTTPS cookies, the quick-tunnel hostname, and real client IPs in
-SmartShield.
+Since fixed: the owner had FileBrowser's share right only after FileBrowser's next start, and no
+write access to Shared. `spark setup` now prepares the owner's Files account through FileBrowser's
+JWT admin channel (see `docs/research/filebrowser-quantum.md`); verified live and by the smoke test.
+
+### 2026-10-29, quick tunnel (tested by the owner)
+
+Dashboard, Files sign-in, guest limits, share links from a phone on mobile data and a large upload
+all worked through `https://<random>.trycloudflare.com`. Found: Cosmos sends the browser to its
+sign-in page with `http://` (it only writes `https://` links when it serves TLS itself,
+`httpServer.go:121`), and Cloudflare serves quick tunnels over plain HTTP too, so that step can
+travel unencrypted. FileBrowser logs the tunnel's address instead of the visitor's; Cosmos's
+SmartShield uses the real address (`utils.GetClientIP`, X-Forwarded-For from trusted proxies).
 
 ## Open questions
 

@@ -71,15 +71,13 @@ step "Setup again changes nothing"
 again=$(spark spark setup)
 echo "$again"
 expect "no changes on re-run" test "$(grep -c 'already up to date' <<<"$again")" -eq 2
+expect "owner's Files rights left as they are" grep -q "already has Shared write access" <<<"$again"
 
 step "Accounts and Files"
 invite=$(spark spark user add "$GUEST")
 GUEST_INVITE_KEY=$(grep -o 'key=[A-Za-z0-9]*' <<<"$invite" | cut -d= -f2)
 export GUEST_INVITE_KEY
 expect "invite link printed" test -n "$GUEST_INVITE_KEY"
-flow first-sign-in
-dc restart filebrowser  # gives the owner the share right (auth.adminUsername, applied at start)
-wait_healthy filebrowser
 expect "browser checks" flow
 
 step "Backup and restore"

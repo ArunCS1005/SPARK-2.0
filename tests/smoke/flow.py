@@ -3,8 +3,7 @@ container (on the project network, where the cosmos alias answers for SPARK_HOST
 
 Signs in to Files through Cosmos's OpenID the way a browser does (Cosmos login, FileBrowser's
 OpenID start, Cosmos's consent form, callback), then checks what each account may do.
-`flow.py first-sign-in` only signs the owner in once: FileBrowser grants the owner (its
-auth.adminUsername) the share right at its next start, so run.sh restarts it in between.
+`flow.py first-sign-in` only signs the owner in (used again after a restore).
 Environment: SPARK_HOSTNAME, OWNER, OWNER_PASSWORD, GUEST, GUEST_PASSWORD, GUEST_INVITE_KEY."""
 
 import os
@@ -21,7 +20,10 @@ failures: list[str] = []
 
 
 def check(what: str, ok: bool, detail: object = "") -> None:
-    print(f"[{'ok' if ok else 'fail'}]{'   ' if ok else ' '}{what}" + ("" if ok else f": {detail}"))
+    print(
+        f"[{'ok' if ok else 'fail'}]{'   ' if ok else ' '}{what}"
+        + ("" if ok else f": {detail}")
+    )
     if not ok:
         failures.append(what)
 
@@ -29,7 +31,11 @@ def check(what: str, ok: bool, detail: object = "") -> None:
 def register(nickname: str, password: str, key: str) -> None:
     body = {"nickname": nickname, "password": password, "registerKey": key}
     response = httpx.post(f"{BASE}/cosmos/api/register", json=body)
-    check(f"{nickname} registers with the invite key", response.status_code == 200, response.text)
+    check(
+        f"{nickname} registers with the invite key",
+        response.status_code == 200,
+        response.text,
+    )
 
 
 def sign_in(nickname: str, password: str) -> httpx.Client:
@@ -45,7 +51,11 @@ def sign_in(nickname: str, password: str) -> httpx.Client:
         data={"client_id": "filebrowser", "scopes": ["openid", "email", "profile"]},
     )
     callback = consent.headers.get("location", "")
-    check(f"{nickname}: Cosmos approves the Files sign-in", consent.status_code == 303, consent.text)
+    check(
+        f"{nickname}: Cosmos approves the Files sign-in",
+        consent.status_code == 303,
+        consent.text,
+    )
     done = client.get(callback)
     check(f"{nickname} signs in to Files", done.status_code == 302, done.text)
     return client
@@ -74,7 +84,9 @@ def chunked_upload(client: httpx.Client, path: str, size: int, chunk: int) -> bo
         )
         if response.status_code != 200:
             return False
-    back = client.get(f"{FILES}/api/resources/download", params={"source": "Home", "file": path})
+    back = client.get(
+        f"{FILES}/api/resources/download", params={"source": "Home", "file": path}
+    )
     return back.content == data
 
 
@@ -86,17 +98,60 @@ def main() -> int:
 
     me = visitor.get(f"{FILES}/api/users", params={"username": "self"}).json()
     scopes = {s["name"]: s["scope"] for s in me.get("scopes", [])}
-    check("guest gets Home/<name> and Shared", scopes == {"Home": f"/{guest}", "Shared": "/"}, me)
+    check(
+        "guest gets Home/<name> and Shared",
+        scopes == {"Home": f"/{guest}", "Shared": "/"},
+        me,
+    )
     check("guest is not an admin", me.get("permissions", {}).get("admin") is False, me)
 
-    check("guest writes own Home", upload(visitor, "Home", "/a.txt", b"hi").status_code == 200)
+    check(
+        "guest writes own Home",
+        upload(visitor, "Home", "/a.txt", b"hi").status_code == 200,
+    )
     shared = upload(visitor, "Shared", "/a.txt", b"x")
     check("guest cannot write Shared", shared.status_code == 403, shared.text)
-    other = visitor.get(f"{FILES}/api/resources", params={"source": "SharedAdmin", "path": "/"})
+    other = visitor.get(
+        f"{FILES}/api/resources", params={"source": "SharedAdmin", "path": "/"}
+    )
     check("guest cannot open SharedAdmin", other.status_code == 403, other.text)
-    share = visitor.post(f"{FILES}/api/share", json={"source": "Home", "path": "/a.txt"})
+    share = visitor.post(
+        f"{FILES}/api/share", json={"source": "Home", "path": "/a.txt"}
+    )
     check("guest cannot create share links", share.status_code == 403, share.text)
-    check("25 MB upload in 10 MB chunks", chunked_upload(visitor, "/big.bin", 25 << 20, 10 << 20))
+    check(
+        "25 MB upload in 10 MB chunks",
+        chunked_upload(visitor, "/big.bin", 25 << 20, 10 << 20),
+    )
+
+    rights = admin.get(f"{FILES}/api/users", params={"username": "self"}).json()
+    sources = [s["name"] for s in rights.get("scopes", [])]
+    check(
+        "owner has Home, Shared and SharedAdmin",
+        sources == ["Home", "Shared", "SharedAdmin"],
+        rights,
+    )
+    check(
+        "owner may share from the first sign-in",
+        rights["permissions"].get("share") is True,
+    )
+    put = upload(admin, "SharedAdmin", "/notes.txt", b"for the group")
+    check(
+        "owner writes to Shared through SharedAdmin", put.status_code == 200, put.text
+    )
+    seen = visitor.get(
+        f"{FILES}/api/resources/download",
+        params={"source": "Shared", "file": "/notes.txt"},
+    )
+    check(
+        "guest reads the owner's file in Shared",
+        seen.content == b"for the group",
+        seen.text,
+    )
+    gone = admin.delete(
+        f"{FILES}/api/resources", params={"source": "SharedAdmin", "path": "/notes.txt"}
+    )
+    check("owner deletes from Shared", gone.status_code == 200, gone.text)
 
     upload(admin, "Home", "/public.txt", b"for everyone")
     made = admin.post(
@@ -106,10 +161,16 @@ def main() -> int:
     link = made.json().get("hash") if made.status_code == 200 else None
     check("owner creates a share link", bool(link), made.text)
     if link:
-        anonymous = httpx.get(f"{FILES}/public/api/resources/download", params={"hash": link})
-        check("share link works without a session", anonymous.content == b"for everyone")
+        anonymous = httpx.get(
+            f"{FILES}/public/api/resources/download", params={"hash": link}
+        )
+        check(
+            "share link works without a session", anonymous.content == b"for everyone"
+        )
 
-    print(f"\n{len(failures)} failure(s)." if failures else "\nAll browser checks passed.")
+    print(
+        f"\n{len(failures)} failure(s)." if failures else "\nAll browser checks passed."
+    )
     return 1 if failures else 0
 
 

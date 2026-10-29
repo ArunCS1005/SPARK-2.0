@@ -7,6 +7,7 @@
 #                             http://spark.localhost for a laptop-only install
 #   ${FB_OIDC_CLIENT_SECRET}  plaintext secret of the Cosmos OpenID client "filebrowser"
 #   ${SPARK_ADMIN_USERNAME}   Cosmos username of the owner (admin)
+#   ${FB_AUTOMATION_SECRET}   secret the spark CLI signs its admin requests with (JWT, below)
 #
 # Two ways to fill them, both work with this exact file:
 #   1. SPARK substitutes them at setup time.
@@ -14,7 +15,7 @@
 #      FileBrowser itself expands environment references in every string value after
 #      parsing the YAML; unset variables become empty strings.
 # Either way: no other dollar sign may appear in any value (secrets included). The
-# comments contain none either, so a strict renderer only ever sees the four names
+# comments contain none either, so a strict renderer only ever sees the five names
 # above. Substituted values must not contain double quotes or backslashes. The
 # container env var FILEBROWSER_OIDC_CLIENT_SECRET overrides clientSecret below if it
 # is set.
@@ -94,6 +95,16 @@ auth:
       # Cosmos's advertised end_session_endpoint, meant to end the Cosmos session too when
       # someone logs out of Files (not yet tested against real Cosmos).
       logoutRedirectUrl: "${SPARK_PUBLIC_URL}/cosmos-ui/logout"
+    # Lets the spark CLI act as a FileBrowser admin without a browser: it signs a short-lived
+    # HS256 token (header X-JWT-Assertion) as the service user "spark-cli" in the group below,
+    # to give the owner SharedAdmin and the share right (Cosmos usernames are letters and digits
+    # only, so no person can be "spark-cli"). Without the secret no token is accepted.
+    jwt:
+      enabled: true
+      secret: "${FB_AUTOMATION_SECRET}"
+      algorithm: HS256
+      groupsClaim: groups
+      adminGroup: spark-automation
 
 frontend:
   name: SPARK Files

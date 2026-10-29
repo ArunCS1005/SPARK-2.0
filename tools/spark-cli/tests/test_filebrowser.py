@@ -10,7 +10,12 @@ REPO_TEMPLATE = Path(__file__).resolve().parents[3] / "config" / "filebrowser" /
 
 
 def render(template: str, **overrides) -> str:
-    values = {"hostname": "spark.example.com", "client_secret": "s3cret", "admin_username": "arun"}
+    values = {
+        "hostname": "spark.example.com",
+        "client_secret": "s3cret",
+        "admin_username": "arun",
+        "automation_secret": "auto-s3cret",
+    }
     return filebrowser.render_config(template, **{**values, **overrides})
 
 
@@ -71,3 +76,41 @@ def test_laptop_only_hostname_renders_plain_http_urls():
     assert filebrowser.redirect_uri("spark.localhost") == (
         "http://spark.localhost/files/api/auth/oidc/callback"
     )
+
+
+def test_repo_template_turns_on_the_automation_channel():
+    text = render(REPO_TEMPLATE.read_text(encoding="utf-8"))
+    assert 'secret: "auto-s3cret"' in text
+    assert "adminGroup: spark-automation" in text
+
+
+def test_automation_token_is_a_valid_hs256_jwt():
+    import base64
+    import hashlib
+    import hmac
+    import json
+
+    token = filebrowser.automation_token("k3y", now=1000)
+    head, claims, signature = token.split(".")
+    expected = hmac.new(b"k3y", f"{head}.{claims}".encode(), hashlib.sha256).digest()
+    assert signature == base64.urlsafe_b64encode(expected).rstrip(b"=").decode()
+    pad = lambda s: s + "=" * (-len(s) % 4)  # noqa: E731
+    assert json.loads(base64.urlsafe_b64decode(pad(head))) == {"alg": "HS256", "typ": "JWT"}
+    assert json.loads(base64.urlsafe_b64decode(pad(claims))) == {
+        "sub": "spark-cli",
+        "groups": ["spark-automation"],
+        "iat": 1000,
+        "exp": 1300,
+    }
+
+
+def test_placeholder_config_never_has_a_known_automation_secret(make_settings):
+    from spark_cli.commands.init import write_filebrowser_placeholder
+
+    texts = []
+    for name in ("a", "b"):
+        settings = make_settings(volumes_dir=make_settings().volumes_dir / name)
+        write_filebrowser_placeholder(settings)
+        texts.append(filebrowser.config_path(settings.volumes_dir).read_text())
+    secrets = [t.split("adminGroup: spark-automation")[0].rsplit('secret: "', 1)[1] for t in texts]
+    assert secrets[0] != secrets[1] and len(secrets[0]) >= 40

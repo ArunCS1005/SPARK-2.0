@@ -46,7 +46,7 @@ First steps after cloning:
 ```bash
 cd SPARK
 docker build --target dev -t spark-cli-dev tools/spark-cli
-docker run --rm -v "$PWD:/repo" spark-cli-dev        # expect: 177 passed, ruff clean
+docker run --rm -v "$PWD:/repo" spark-cli-dev        # expect: 184 passed, ruff clean
 tests/smoke/run.sh                                   # optional, ~2 min: whole stack end to end
 ```
 
@@ -102,12 +102,11 @@ Verified results, including the Files permission checks, are in `docs/design.md`
 
 Open issues:
 
-- The owner gets FileBrowser's share right only at the next FileBrowser start after their first
-  sign-in (`auth.adminUsername` is applied at start). Documented workaround: restart `filebrowser`
-  once. A proper fix is being researched.
-- Not yet tested through Cloudflare (needs the owner's OK, it is public): the quick tunnel, the
-  100 MB request limit, HTTPS cookies, real client IPs in SmartShield, `spark tunnel` against a real
-  account.
+- Cosmos sends browsers to its sign-in page over `http://` (no setting to change it), and quick
+  tunnels serve plain HTTP too. Own domains: Always Use HTTPS + HSTS at Cloudflare; a full fix is
+  part of the domain/security research.
+- Tested through a quick tunnel by the owner (works); `spark tunnel` has not run against a real
+  Cloudflare account yet.
 - If the network drops right as first-run setup answers, Cosmos is set up but SPARK never saved the
   admin token; recovery is in `docs/guides/troubleshooting.md`, "Lost admin token".
 
@@ -118,9 +117,10 @@ locally, and let the owner check it before starting the next.
 
 1. **Add-ons** in `compose/`: Jellyfin (LAN and Tailscale only, never the tunnel), Tailscale,
    Nextcloud (Postgres + Redis, OpenID against Cosmos, own flat hostname), and `docs/roadmap.md`.
-2. **Owner share right** in FileBrowser without the manual restart.
-3. **Cloudflare checks** with the owner's OK: quick tunnel end to end, then `spark tunnel` on the
-   owner's domain.
+2. **Domain tunnel and security**: research and test `spark tunnel` on the owner's domain, the
+   `http://` sign-in step, HSTS and cookie flags.
+3. **Releases**: publish the `spark-cli` image and tagged releases on GitHub (plan in
+   `docs/release.md`).
 4. **Windows** via WSL2 + Docker Engine (design decision of 2026-10-29), after Linux is stable.
 
 ## Startup order (nothing public before the admin exists)

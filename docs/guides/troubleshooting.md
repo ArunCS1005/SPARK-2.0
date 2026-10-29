@@ -28,9 +28,11 @@ Do not turn "prune" or "auto update" on in the dashboard.
   cannot sign in, because Cosmos's sign-in links carry no port.
 - Quick tunnel: its address changes whenever it restarts. Run `spark setup` again.
 
-## The owner cannot create share links
+## The owner cannot create share links or change Shared
 
-Run `docker compose restart filebrowser` once after the owner's first sign-in to Files.
+Run `docker compose run --rm spark setup`: it gives the owner's Files account the share right and
+the SharedAdmin folder. If it says FileBrowser did not answer, check
+`docker compose logs filebrowser` and run setup again.
 
 ## FileBrowser keeps restarting
 

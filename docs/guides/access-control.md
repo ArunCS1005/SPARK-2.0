@@ -27,21 +27,28 @@ The owner account made by setup cannot be removed, and neither can the last admi
 |---|---|---|---|
 | **Home** (opens first) | `users/<name>/` | Everyone gets their own, made at first sign-in | Read and write. Nobody else's. |
 | **Shared** | `shared/` | Everyone | Look and download only, admins included |
-| **SharedAdmin** | `shared/` (same folder) | Nobody until an admin grants it | Read and write |
+| **SharedAdmin** | `shared/` (same folder) | The owner (set up by `spark setup`); other admins once granted | Read and write |
 
-To put files in Shared, copy them into `SPARK_DATA/shared` on the laptop, or give an admin the
-SharedAdmin folder once: Files → Settings → User management → edit the admin → add SharedAdmin.
+Shared and SharedAdmin are the same folder seen two ways. Everyone sees it read-only as **Shared**;
+the owner also gets **SharedAdmin**, where uploading, renaming, editing and deleting work, and the
+changes show up in everyone's Shared right away. FileBrowser cannot make one folder writable for
+admins only, which is why it appears twice.
+
+Other ways to put files in Shared: copy them into `SPARK_DATA/shared` on the laptop, or give another
+admin the SharedAdmin folder: Files → Settings → User management → edit the admin → add SharedAdmin.
 
 Admins in Cosmos are admins in Files. Normal accounts cannot create share links.
 
 ## Share links
 
-The owner (and admins given the right) can share any file or folder: right-click → Share. Choose
-an expiry and, if you like, a password. The link works for anyone, with no account.
+The owner can share any file or folder from the first sign-in: right-click → Share. Choose an
+expiry and, if you like, a password. The link works for anyone, with no account. Other admins get
+the right in Files → Settings → User management.
 
-Remember the step from [getting-started.md](getting-started.md): after the owner's first sign-in to
-Files, run `docker compose restart filebrowser` once; until then the owner cannot create links.
-Other admins get the right in Files → Settings → User management.
+How the owner gets these rights: `spark setup` prepares the owner's Files account before their
+first sign-in (or updates it if it exists) through FileBrowser's admin API, as a service account
+called `spark-cli`. That account has no password and cannot sign in; its empty folder
+`users/spark-cli` can be ignored.
 
 ## Two-factor login
 

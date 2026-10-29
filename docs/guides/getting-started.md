@@ -43,13 +43,9 @@ Your answers are saved in `.env` in the SPARK folder. Running the installer agai
   the owner account. Turn on two-factor login for it (your account menu): the dashboard can
   control every container on the laptop.
 - **Files:** open `<your address>/files` and click **Sign in with SPARK**.
-- **Share links:** right after your first sign-in to Files, run this once so the owner account
-  can create share links:
-
-  ```bash
-  docker compose restart filebrowser
-  ```
-
+- **Shared folder and share links:** the owner account can create share links from the first
+  sign-in, and can add, change and delete files in Shared through the **SharedAdmin** folder.
+  Everyone else sees Shared read-only. See [access-control.md](access-control.md).
 - **Invite friends:** `docker compose run --rm spark user add <name>` prints a private invite link.
   See [access-control.md](access-control.md).
 - **Keep it running with the lid closed:** see [always-on.md](always-on.md).

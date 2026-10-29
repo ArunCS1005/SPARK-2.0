@@ -5,6 +5,7 @@ config SPARK wrote. No network, no Docker socket; safe to run any number of time
 import argparse
 import contextlib
 import os
+import secrets
 from pathlib import Path
 
 from spark_cli import filebrowser, output, seed
@@ -101,6 +102,8 @@ def write_filebrowser_placeholder(settings: Settings) -> bool:
         hostname=settings.hostname or "localhost",
         client_secret=PLACEHOLDER_SECRET,
         admin_username=PLACEHOLDER_ADMIN,
+        # Never a known value: the JWT method is on in the template, and this secret is not kept.
+        automation_secret=secrets.token_urlsafe(32),
     )
     filebrowser.write_config(settings.volumes_dir, text)
     return True

@@ -4,6 +4,7 @@ again at any time; a run with nothing to change writes nothing and restarts noth
 import argparse
 import getpass
 import re
+import secrets
 import string
 import sys
 import time
@@ -15,6 +16,7 @@ from spark_cli import filebrowser, output, seed
 from spark_cli.cosmos import CosmosClient
 from spark_cli.docker_api import DockerClient
 from spark_cli.errors import SparkError
+from spark_cli.filebrowser import FileBrowserClient
 from spark_cli.settings import Settings, is_laptop_only, public_url
 from spark_cli.state import State
 
@@ -23,6 +25,10 @@ NICKNAME = re.compile(r"[A-Za-z0-9]{3,32}")
 PASSWORD_SPECIALS = "~!@#$%^&*()_+=-{[}]:;\"'<>.?/,"
 
 FILES_ROUTE = "SPARK Files"
+# Names of the sources in config/filebrowser/config.yaml.
+OWNER_SOURCES = ("Home", "Shared", "SharedAdmin")
+SHARED_ADMIN = "SharedAdmin"
+FULL_ACCESS = {"view": True, "download": True, "create": True, "modify": True, "delete": True}
 QUICK_TUNNEL_URL = re.compile(r"https://([a-z0-9-]+\.trycloudflare\.com)")
 
 
@@ -56,12 +62,14 @@ class Setup:
         state: State,
         *,
         cosmos_factory: Callable[..., CosmosClient] = CosmosClient.from_settings,
+        filebrowser_factory: Callable[..., FileBrowserClient] = FileBrowserClient.from_settings,
         sleep: Callable[[float], None] = time.sleep,
     ):
         self.settings = settings
         self.docker = docker
         self.state = state
         self.cosmos_factory = cosmos_factory
+        self.filebrowser_factory = filebrowser_factory
         self.sleep = sleep
 
     def run(self, args: argparse.Namespace) -> int:
@@ -214,6 +222,10 @@ class Setup:
             self.restart_pause(cosmos, seconds=4)
             output.ok("Cosmos restarted to load the sign-in client")
 
+        automation = self.state.get("filebrowser.automation_secret")
+        if not automation:
+            automation = secrets.token_urlsafe(32)
+            self.state.set("filebrowser.automation_secret", automation)
         template = (Path(self.settings.config_dir) / "filebrowser" / "config.yaml").read_text(
             encoding="utf-8"
         )
@@ -222,6 +234,7 @@ class Setup:
             hostname=hostname,
             client_secret=secret,
             admin_username=self.state.get("setup.admin_user") or "spark-pending",
+            automation_secret=automation,
         )
         changed = filebrowser.write_config(self.settings.volumes_dir, text)
         container = self.docker.find_container("filebrowser")
@@ -235,6 +248,45 @@ class Setup:
             output.ok("FileBrowser was not running; started it")
         else:
             output.ok("FileBrowser config already up to date")
+        if container is not None:
+            self.grant_owner(automation)
+
+    def grant_owner(self, secret: str) -> None:
+        """The owner can write to Shared (through the SharedAdmin source) and create share links
+        from their first sign-in. FileBrowser gives neither to an OpenID user by itself:
+        SharedAdmin is not a default source, and auth.adminUsername gets the share right only at
+        FileBrowser's next start (cmd/user.go validateUserInfo). Before that first sign-in the
+        account is created here with the same login method, which the sign-in then reuses
+        (internal/web/auth.go getOrCreateAuthenticatedUser)."""
+        owner = self.state.get("setup.admin_user")
+        if not owner:
+            return
+        fb = self.filebrowser_factory(self.settings, secret)
+        if not fb.wait_until_up(sleep=self.sleep):
+            output.warn("FileBrowser did not answer, so the owner's Files rights were not checked.")
+            output.info("Run spark setup again once it is up: docker compose ps filebrowser")
+            return
+        user = fb.get_user(owner)
+        if user is None:
+            scopes = [{"name": n, "scope": "/", "permissions": FULL_ACCESS} for n in OWNER_SOURCES]
+            fb.create_user(owner, login_method="oidc", scopes=scopes)
+            output.ok(f"Files account for '{owner}' prepared (signs in through Cosmos)")
+            user = fb.get_user(owner) or {}
+
+        changes: dict[str, Any] = {}
+        rights = user.get("permissions") or {}
+        if not all(rights.get(key) for key in ("admin", "share", "api")):
+            changes["permissions"] = {**rights, "admin": True, "share": True, "api": True}
+        scopes = user.get("scopes") or []
+        if not any(s.get("name") == SHARED_ADMIN for s in scopes):
+            shared_admin = {"name": SHARED_ADMIN, "scope": "/", "permissions": FULL_ACCESS}
+            changes["scopes"] = [*scopes, shared_admin]
+        for field, value in changes.items():
+            fb.update_user(owner, {field: value})
+        if changes:
+            output.ok(f"'{owner}' can write to Shared (as {SHARED_ADMIN}) and create share links")
+        else:
+            output.ok(f"'{owner}' already has Shared write access and share links")
 
     def restart_pause(self, cosmos: CosmosClient, seconds: float = 2) -> None:
         self.sleep(seconds)

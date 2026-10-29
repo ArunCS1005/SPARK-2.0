@@ -1,5 +1,8 @@
 import argparse
+import base64
 import copy
+import hashlib
+import hmac
 import itertools
 import json
 import os
@@ -12,6 +15,7 @@ from spark_cli import filebrowser
 from spark_cli.commands.setup import Setup
 from spark_cli.cosmos import CosmosClient
 from spark_cli.errors import SparkError
+from spark_cli.filebrowser import FileBrowserClient
 from spark_cli.state import State
 
 TOKEN = "cosmos_admin_token"
@@ -115,6 +119,54 @@ def ok(data) -> httpx.Response:
     return reply(200, {"status": "OK", "data": data})
 
 
+class FakeFileBrowser:
+    """FileBrowser 2.0.2's users API as SPARK uses it, behind httpx.MockTransport. New users get
+    userDefaults rights (no admin, no share) and Home becomes /<name>, like state.CreateUser;
+    PATCH changes only the fields in `which`. Every call must carry a valid service token."""
+
+    def __init__(self):
+        self.users: dict[str, dict] = {}
+        self.writes: list[str] = []
+        self.up = True
+        self.secret: str | None = None  # set by the test helper from SPARK's state
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/files/health":
+            return httpx.Response(200 if self.up else 503)
+        self.check_token(request.headers.get("x-jwt-assertion", ""))
+        name = request.url.params.get("username")
+        if request.method == "GET":
+            user = self.users.get(name)
+            return httpx.Response(200, json=user) if user else httpx.Response(404)
+        body = json.loads(request.content)
+        self.writes.append(f"{request.method} {name or body['data']['username']}")
+        if request.method == "POST":
+            data = body["data"]
+            scopes = [
+                {**s, "scope": f"/{data['username']}" if s["name"] == "Home" else s["scope"]}
+                for s in data["scopes"]
+            ]
+            self.users[data["username"]] = {
+                "username": data["username"],
+                "loginMethod": data["loginMethod"],
+                "permissions": {"admin": False, "share": False, "api": False, "realtime": False},
+                "scopes": scopes,
+            }
+            return httpx.Response(201)
+        if request.method == "PATCH":
+            for field in body["which"]:
+                self.users[name][field] = body["data"][field]
+            return httpx.Response(204)
+        raise AssertionError(f"unexpected {request.method} {request.url}")
+
+    def check_token(self, token: str) -> None:
+        head, claims, signature = token.split(".")
+        expected = hmac.new(self.secret.encode(), f"{head}.{claims}".encode(), hashlib.sha256)
+        assert signature == base64.urlsafe_b64encode(expected.digest()).rstrip(b"=").decode()
+        payload = json.loads(base64.urlsafe_b64decode(claims + "=="))
+        assert payload["sub"] == "spark-cli" and payload["groups"] == ["spark-automation"]
+
+
 class FakeDocker:
     def __init__(self, *, logs: str = "", filebrowser: bool = True):
         services = ["cosmos", "quick-tunnel"] + (["filebrowser"] if filebrowser else [])
@@ -124,6 +176,7 @@ class FakeDocker:
         self.log_text = logs
         self.added_aliases: list[str] = []
         self.restarted: list[str] = []
+        self.files = FakeFileBrowser()  # the API inside the filebrowser container
 
     def find_container(self, service):
         return self.containers.get(service)
@@ -184,12 +237,20 @@ def run_setup(settings, docker, server, **arg_overrides) -> int:
         http = httpx.Client(transport=httpx.MockTransport(server), base_url="http://cosmos:80")
         return CosmosClient(http, hostname or settings.hostname or "localhost", token)
 
+    def filebrowser_factory(settings, secret):
+        docker.files.secret = secret
+        http = httpx.Client(
+            transport=httpx.MockTransport(docker.files), base_url="http://filebrowser:80"
+        )
+        return FileBrowserClient(http, secret)
+
     args = {"admin_user": None, "admin_email": None, "require_mfa": False, **arg_overrides}
     setup = Setup(
         settings,
         docker,
         State(settings.state_dir),
         cosmos_factory=cosmos_factory,
+        filebrowser_factory=filebrowser_factory,
         sleep=lambda _: None,
     )
     return setup.run(argparse.Namespace(**args))
@@ -500,3 +561,70 @@ def test_first_run_asks_for_the_owner_name_in_a_terminal(
     monkeypatch.setattr("builtins.input", lambda prompt: "Owner1")
     run_setup(setup_settings(admin_user=""), docker, server)
     assert server.setup_payload["nickname"] == "Owner1"
+
+
+FULL = {"view": True, "download": True, "create": True, "modify": True, "delete": True}
+
+
+def test_owner_gets_shared_write_access_and_share_links_before_first_sign_in(
+    setup_settings, docker, server, capsys
+):
+    settings = setup_settings()
+    run_setup(settings, docker, server)
+
+    owner = docker.files.users["arun"]
+    assert owner["loginMethod"] == "oidc"  # the owner's first Cosmos sign-in reuses it
+    assert owner["permissions"] == {"admin": True, "share": True, "api": True, "realtime": False}
+    assert [(s["name"], s["scope"]) for s in owner["scopes"]] == [
+        ("Home", "/arun"),
+        ("Shared", "/"),
+        ("SharedAdmin", "/"),
+    ]
+    assert owner["scopes"][2]["permissions"] == FULL
+    out = capsys.readouterr().out
+    assert "'arun' can write to Shared (as SharedAdmin) and create share links" in out
+    secret = State(settings.state_dir).get("filebrowser.automation_secret")
+    assert len(secret) >= 40
+    assert f'secret: "{secret}"' in fb_config(settings)
+    assert secret not in out
+
+
+def test_owner_who_already_signed_in_gets_the_missing_rights_only(setup_settings, docker, server):
+    docker.files.users["arun"] = {
+        "username": "arun",
+        "loginMethod": "oidc",
+        "permissions": {"admin": True, "share": False, "api": False, "realtime": False},
+        "scopes": [
+            {"name": "Home", "scope": "/arun", "permissions": FULL},
+            {"name": "Shared", "scope": "/", "permissions": FULL},
+        ],
+    }
+    run_setup(setup_settings(), docker, server)
+    owner = docker.files.users["arun"]
+    assert owner["permissions"]["share"] is True
+    assert [s["name"] for s in owner["scopes"]] == ["Home", "Shared", "SharedAdmin"]
+    assert docker.files.writes == ["PATCH arun", "PATCH arun"]
+
+
+def test_owner_rights_are_not_rewritten_on_re_runs(setup_settings, docker, server, capsys):
+    settings = setup_settings()
+    run_setup(settings, docker, server)
+    docker.files.writes.clear()
+    capsys.readouterr()
+
+    run_setup(settings, docker, server)
+    assert docker.files.writes == []
+    assert "'arun' already has Shared write access" in capsys.readouterr().out
+
+
+def test_guests_are_never_touched(setup_settings, docker, server):
+    docker.files.users["bob"] = {"username": "bob", "permissions": {}, "scopes": []}
+    run_setup(setup_settings(), docker, server)
+    assert docker.files.users["bob"] == {"username": "bob", "permissions": {}, "scopes": []}
+
+
+def test_unanswered_filebrowser_is_a_warning(setup_settings, docker, server, capsys):
+    docker.files.up = False
+    assert run_setup(setup_settings(), docker, server) == 0
+    assert "owner's Files rights were not checked" in capsys.readouterr().out
+    assert docker.files.users == {}

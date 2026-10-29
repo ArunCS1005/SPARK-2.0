@@ -457,7 +457,32 @@ docker compose run --rm filebrowser -c /home/filebrowser/config/recovery.yaml us
     blocks those POSTs (`cosmos:proxy/routerGen.go:175-176`). Test clients should send `Referer`.
     UNVERIFIED.
 
-## Optional automation channel (tested, not enabled in the template)
+## Automation channel (enabled in the template since 2026-10-29)
+
+Used by `spark setup` to give the owner the share right and the `SharedAdmin` source (see
+`docs/development.md`, "FileBrowser admin channel"). Findings from the v2.0.2-stable source:
+
+- No setting gives a non-default source to some users only: `defaultEnabled` sources go to every
+  new user, the rest to nobody (`pkg/settings/settings.go:78-100`,
+  `MergeDefaultEnabledBackendScopes`).
+- `auth.adminUsername` only gets share and api at startup, and only if the user already exists and
+  is an admin (`cmd/user.go:77-88`).
+- `POST /api/users` (admin only) accepts `loginMethod: oidc` and creates the home folder
+  (`internal/web/users.go:167-203`), but `state.CreateUser` applies `userDefaults`, which overwrite
+  `admin`, `share`, `api` and `realtime` (`internal/state/users.go:181-218`,
+  `pkg/settings/settings.go:133-136`). Rights must be set with a following `PATCH`.
+- A `Home` scope of `/` is expanded to `/<username>` at creation
+  (`pkg/settings/user_scopes.go:13-37`).
+- Admins may `PATCH` any user, themselves included; only non-admins are limited to profile fields
+  (`internal/web/users.go:395-402`).
+- An OpenID sign-in for an existing user only promotes admin, checks the login method and syncs
+  groups (`internal/web/auth.go:83-140`).
+- JWT: header `X-JWT-Assertion` (default) or query `?jwt=`, HS256 by default, `sub` is the user
+  name, `exp` is checked (`internal/web/middleware.go:449-460,521-578`,
+  `internal/auth/jwt.go:47-104`). Enabling it only adds "jwt" as a login-method choice in the user
+  editor; the login page is unchanged (`frontend/src/components/prompts/UserEdit.vue`).
+
+Earlier notes:
 
 `auth.methods.jwt` can give the `spark` CLI admin access without a browser. Keys: `enabled: true`,
 `secret: "<random>"`, `algorithm: HS256`, `groupsClaim: groups`, `adminGroup: spark-automation`.

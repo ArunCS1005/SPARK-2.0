@@ -97,7 +97,7 @@ Docker makes it root's instead of copying in the image's folder.
 | Command | Module | Behaviour |
 |---|---|---|
 | `spark init` | `commands/init.py` | Run by the `init` service. Creates the `SPARK_DATA` folders, writes Cosmos's seed config (see above), and writes a placeholder FileBrowser config if none exists so FileBrowser never starts without one (it would create a default `admin` user). Idempotent; no network, no Docker socket. |
-| `spark setup [--admin-user U] [--admin-email E] [--require-mfa]` | `commands/setup.py` | Idempotent. First run: Cosmos one-shot setup (`POST /cosmos/api/setup`, HTTPS mode `DISABLED`, `createAdminToken: true`), saves the admin token to state, waits for Cosmos to restart. Every run: reconciles Cosmos config (prune off, auto-update off, country, trusted proxies = Docker network subnet, local-IP HTTP access on), the `/files` route, the FileBrowser OpenID client (when it is created or replaced, restarts Cosmos: its sign-in server loads clients only at start), renders FileBrowser's config, restarts `filebrowser` when the config changed or it is not running. Laptop-only mode: a `*.localhost` hostname is served over plain http and needs `SPARK_HTTP_PORT=80` (Cosmos's sign-in links carry no port); every other hostname uses https. Quick-tunnel mode: reads the current `trycloudflare.com` hostname from the `quick-tunnel` logs, uses it as the hostname and reconnects `cosmos` to the project network with that alias (Docker API). |
+| `spark setup [--admin-user U] [--admin-email E] [--require-mfa]` | `commands/setup.py` | Idempotent. First run: Cosmos one-shot setup (`POST /cosmos/api/setup`, HTTPS mode `DISABLED`, `createAdminToken: true`), saves the admin token to state, waits for Cosmos to restart. Every run: reconciles Cosmos config (prune off, auto-update off, country, trusted proxies = Docker network subnet, local-IP HTTP access on), the `/files` route, the FileBrowser OpenID client (when it is created or replaced, restarts Cosmos: its sign-in server loads clients only at start), renders FileBrowser's config, restarts `filebrowser` when the config changed or it is not running, then gives the owner's Files account the share and API rights and the `SharedAdmin` source (creating the account first, login method `oidc`, if the owner has not signed in yet; see "FileBrowser admin channel"). Laptop-only mode: a `*.localhost` hostname is served over plain http and needs `SPARK_HTTP_PORT=80` (Cosmos's sign-in links carry no port); every other hostname uses https. Quick-tunnel mode: reads the current `trycloudflare.com` hostname from the `quick-tunnel` logs, uses it as the hostname and reconnects `cosmos` to the project network with that alias (Docker API). |
 | `spark user add <name> [--admin] [--email E]` / `list` / `remove <name>` | `commands/user.py` | Cosmos accounts. `add` prints the invite (register) link. Surfaces the 5-user free-tier limit clearly. |
 | `spark tunnel new <name> [--also <suffix>]… [--always-https]` / `list` / `remove <name>` | `commands/tunnel.py` | Cloudflare API (needs `CF_API_TOKEN`, `CF_ACCOUNT_ID`, `CF_ZONE_ID`). Creates (or reuses) remotely managed tunnel `spark-<name>`, ingress `<name>.<zone> → http://cosmos:80` (+ `<name>-<suffix>.<zone>` per `--also`) ending in `http_status:404`, proxied CNAMEs to `<id>.cfargotunnel.com`, prints the tunnel token. Refuses, before any change, a hostname that already has another DNS record. `remove` deletes its CNAMEs, its connections, then the tunnel. `--always-https` also needs Zone Settings: Edit. Used by the owner for friends, or by anyone for their own domain. |
 | `spark doctor` | `commands/doctor.py` | Read-only health report; exit code 0 = healthy, 1 = problems found. |
@@ -110,6 +110,24 @@ Exit codes: `0` success, `1` failure/unhealthy, `2` usage error. Errors are rais
 
 `spark user` talks to Cosmos under the hostname setup saved, and refuses to run when
 `SPARK_HOSTNAME` differs from it (run setup first).
+
+### FileBrowser admin channel
+
+FileBrowser gives an OpenID user neither the share right (until its next start) nor any source
+that is not `defaultEnabled`, such as `SharedAdmin`. So `spark setup` acts as a FileBrowser admin
+through the template's `auth.methods.jwt`: it signs a 5-minute HS256 token
+(`sub: spark-cli`, `groups: [spark-automation]`, header `X-JWT-Assertion`) with
+`filebrowser.automation_secret` from `/state/state.json` (rendered into the config as
+`${FB_AUTOMATION_SECRET}`), and calls `http://filebrowser:80/files/api/users` inside the project
+network. FileBrowser creates the admin user `spark-cli` on first use (no password; Cosmos names are
+letters and digits only, so no person can have it). `init`'s placeholder config uses a random,
+unsaved secret, so the channel never has a known key.
+
+`POST /files/api/users` applies `userDefaults` to new users, permissions included
+(`state.CreateUser` → `settings.ApplyUserDefaultsFrom`), so setup creates the owner with the three
+sources, then sets `admin`, `share` and `api` with `PATCH`. An OpenID sign-in reuses an existing
+account with login method `oidc` and changes neither its sources nor its rights
+(`internal/web/auth.go` `getOrCreateAuthenticatedUser`).
 
 ### `spark doctor` checks
 

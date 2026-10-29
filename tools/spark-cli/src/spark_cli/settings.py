@@ -50,6 +50,7 @@ class Settings:
     # Wiring inside the CLI container (overridable for development)
     project: str = "spark"
     cosmos_url: str = "http://cosmos:80"
+    filebrowser_url: str = "http://filebrowser:80"
     docker_socket: str = "/var/run/docker.sock"
     state_dir: Path = Path("/state")
     data_dir: Path = Path("/data")
@@ -121,6 +122,7 @@ class Settings:
             versions=versions,
             project=get("COMPOSE_PROJECT_NAME", "spark") or "spark",
             cosmos_url=get("SPARK_CLI_COSMOS_URL", "http://cosmos:80"),
+            filebrowser_url=get("SPARK_CLI_FILEBROWSER_URL", "http://filebrowser:80"),
             docker_socket=get("SPARK_CLI_DOCKER_SOCKET", "/var/run/docker.sock"),
             state_dir=Path(get("SPARK_CLI_STATE_DIR", "/state")),
             data_dir=Path(get("SPARK_CLI_DATA_DIR", "/data")),
