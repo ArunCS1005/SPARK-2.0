@@ -57,7 +57,7 @@ wanted but **not a priority now**.
 | Finding | Consequence | Source |
 |---|---|---|
 | Cloudflare free certs cover only one subdomain level | No `files.<handle>.<domain>`; paths instead | developers.cloudflare.com/ssl/edge-certificates/universal-ssl/limitations/ |
-| Tunnels, ingress, DNS and tokens are all creatable by API (Tunnel:Edit + DNS:Edit) | `spark friend new` can be fully automatic | developers.cloudflare.com/cloudflare-one/…/create-remote-tunnel-api/ |
+| Tunnels, ingress, DNS and tokens are all creatable by API (Tunnel:Edit + DNS:Edit) | `spark tunnel new` can be fully automatic | developers.cloudflare.com/cloudflare-one/…/create-remote-tunnel-api/ |
 | 100 MB request body limit; 125 s timeout | Chunked uploads only; 50 MB Nextcloud chunks | developers.cloudflare.com/support/…/error-413/ |
 | Video over tunnel public hostnames prohibited on free plans | Jellyfin LAN/Tailscale only | developers.cloudflare.com/fundamentals/reference/policies-compliances/delivering-videos-with-cloudflare/ |
 | Quick tunnels: random URL, 200 in-flight requests, no SSE | Testing only | developers.cloudflare.com/…/trycloudflare/ |
@@ -75,6 +75,9 @@ wanted but **not a priority now**.
 | Free domains: GitHub Student Pack (Namecheap .me, Name.com, .TECH); Freenom dead; DuckDNS can't use tunnels | Owner gets a Student Pack domain | education.github.com/pack |
 
 ## Build plan
+
+> Status 2026-10-29: phases 0–4 are done on Linux (Windows moved to later, see Decisions); the
+> tested state and the next tasks are in `HANDOFF.md`. The plan below is kept as it was written.
 
 Each phase ends with something working and verified. Phases 0–3 are the core product.
 
@@ -113,9 +116,9 @@ Findings recorded under *Spike results* below.
 
 ### Phase 3 — Domains
 - `docs/guides/domains.md`: getting a Student Pack domain, moving DNS to Cloudflare, own-domain tunnel.
-- `spark friend new <handle>`: owner's API token → tunnel `spark-<handle>`, ingress
+- `spark tunnel new <handle>` (planned as `spark friend new`): owner's API token → tunnel `spark-<handle>`, ingress
   `<handle>.<domain> → http://cosmos:80` + catch-all 404, proxied CNAME, prints token.
-  `spark friend remove <handle>`.
+  `spark tunnel remove <handle>`.
 - **Verify:** a second machine installs with the printed token and is reachable at `<handle>.<domain>`.
 
 ### Phase 4 — Operations

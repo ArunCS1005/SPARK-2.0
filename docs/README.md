@@ -2,10 +2,12 @@
 
 | Document | For |
 |---|---|
-| [architecture.md](architecture.md) | How SPARK works: components, networking, identity, storage, security |
-| [design.md](design.md) | Design decisions, research findings, phased build plan |
-| `guides/getting-started.md` | Install on Windows or Linux *(Phase 1)* |
-| `guides/domains.md` | Getting a domain, own-domain vs friend-of-owner setup *(Phase 3)* |
-| `guides/access-control.md` | Admins, guests, share links *(Phase 2)* |
-| `guides/always-on.md` | Lid close, sleep, auto-start on Windows and Linux *(Phase 4)* |
-| `guides/troubleshooting.md` | Known problems and fixes *(ongoing)* |
+| [guides/getting-started.md](guides/getting-started.md) | Installing SPARK on Linux and the first steps |
+| [guides/domains.md](guides/domains.md) | Own domain, a friend's address, `spark tunnel` |
+| [guides/access-control.md](guides/access-control.md) | Accounts, folders, share links, two-factor login |
+| [guides/always-on.md](guides/always-on.md) | Lid, sleep and starting at boot |
+| [guides/troubleshooting.md](guides/troubleshooting.md) | Known problems and fixes |
+| [architecture.md](architecture.md) | How SPARK works, with diagrams |
+| [design.md](design.md) | Decisions, research findings, verified spike results |
+| [development.md](development.md) | Interfaces the code relies on, commands, running the tests |
+| [research/filebrowser-quantum.md](research/filebrowser-quantum.md) | FileBrowser Quantum facts with source references |

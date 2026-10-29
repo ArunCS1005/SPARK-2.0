@@ -4,7 +4,8 @@ Turn a Linux laptop into a personal home server with one command:
 private cloud storage, guest/admin accounts, a dashboard, and access from anywhere
 through your own domain — no router port-forwarding needed (works behind college Wi-Fi).
 
-> **Status:** in development (Linux first; Windows later). See [`HANDOFF.md`](HANDOFF.md).
+> **Status:** works on Linux (tested end to end on a laptop-only install); Cloudflare paths and
+> add-ons are next, Windows later. Progress: [`HANDOFF.md`](HANDOFF.md).
 > Design: [`docs/design.md`](docs/design.md) ·
 > Architecture: [`docs/architecture.md`](docs/architecture.md)
 
@@ -34,14 +35,36 @@ SPARK/
 └── README.md
 ```
 
-## Quick start *(planned — not working yet)*
+## Quick start (Linux)
 
-```powershell
-# Windows (Docker Desktop installed and running)
-git clone <repo> SPARK; cd SPARK; .\scripts\install.ps1
-```
+You need Docker Engine with the Compose plugin 2.24 or newer.
 
 ```bash
-# Linux
-git clone <repo> SPARK && cd SPARK && ./scripts/install.sh
+git clone https://github.com/ArunCS1005/SPARK-2.0.git SPARK
+cd SPARK
+./scripts/install.sh
 ```
+
+The installer asks where to keep files and how people reach SPARK (your own domain, this laptop
+only at `http://spark.localhost`, or a temporary test address), then asks you to choose the owner
+account. Full walk-through: [`docs/guides/getting-started.md`](docs/guides/getting-started.md).
+
+## Everyday use
+
+```bash
+docker compose run --rm spark doctor              # health check, changes nothing
+docker compose run --rm spark user add <name>     # invite someone (prints a private link)
+docker compose run --rm spark backup              # save accounts and settings
+docker compose run --rm spark tunnel new <name>   # owner: an address on your domain for a friend
+```
+
+## Guides
+
+- [Getting started](docs/guides/getting-started.md)
+- [Domains and tunnels](docs/guides/domains.md)
+- [Accounts, folders and share links](docs/guides/access-control.md)
+- [Keeping the laptop on](docs/guides/always-on.md)
+- [Troubleshooting](docs/guides/troubleshooting.md)
+
+For contributors: [`docs/development.md`](docs/development.md) (interfaces and how to run the tests)
+and [`HANDOFF.md`](HANDOFF.md) (state of the work and next tasks).

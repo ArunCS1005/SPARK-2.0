@@ -38,17 +38,20 @@ Jellyfin, Tailscale and Nextcloud are later add-ons.
 - Docker Engine with the compose plugin, **compose v2.24 or newer** (`compose.yaml` uses
   `env_file: required: false`). Rootful Docker; the user in the `docker` group.
 - `git`, `curl`. No Python packages are installed on the host.
-- Optional for later tasks: `shellcheck` (or the `koalaman/shellcheck` image), Node 20+ for
-  rendering Mermaid diagrams (`npx -y @mermaid-js/mermaid-cli@11`).
+- No other host tools are needed: shellcheck and Mermaid rendering run in pinned images
+  (`koalaman/shellcheck:v0.10.0`, `minlag/mermaid-cli:11.4.2`).
 
-First steps after unzipping:
+First steps after cloning:
 
 ```bash
 cd SPARK
 docker build --target dev -t spark-cli-dev tools/spark-cli
-docker run --rm -v "$PWD:/repo" spark-cli-dev        # expect: 107 passed, ruff clean
-git status                                           # nothing committed yet
+docker run --rm -v "$PWD:/repo" spark-cli-dev        # expect: 177 passed, ruff clean
+tests/smoke/run.sh                                   # optional, ~2 min: whole stack end to end
 ```
+
+Repository: `https://github.com/ArunCS1005/SPARK-2.0` (branch `main`). Commit locally after each
+finished task; only the owner pushes.
 
 ## Tests
 
@@ -65,20 +68,15 @@ with small fake objects.
 
 ## Running the stack locally
 
-```bash
-cp .env.example .env
-# edit .env: SPARK_DATA=$PWD/data (absolute path), SPARK_HOSTNAME= (empty for local-only),
-#            COMPOSE_PROFILES= (empty: no tunnel yet)
-docker compose up -d cosmos            # runs init first, then Cosmos on http://localhost:8080
-SPARK_ADMIN_PASSWORD='...' docker compose run --rm -e SPARK_ADMIN_PASSWORD spark setup --admin-user <name>
-```
+For users: `./scripts/install.sh` (see `docs/guides/getting-started.md`). For development, use a
+throwaway project so a real install is never touched (details in `docs/development.md`, "Running
+Cosmos on a development machine"): project `spark-dev`, an env file and a small override under
+`spike/dev/`, laptop-only hostname `spark.localhost` on port 80, torn down with
+`docker compose -p spark-dev --profile '*' down -v`.
 
-`spark setup` ran live on Linux (see "State"): local-only mode, a hostname without a tunnel, and
-re-runs that changed nothing. The quick-tunnel path is tested with fakes only so far.
-
-Without a public hostname, setup configures Cosmos only. FileBrowser's OpenID sign-in needs a real
-hostname: either a domain with a tunnel (`TUNNEL_TOKEN`, profile `tunnel`) or the `quick-tunnel`
-profile for testing (a random public `trycloudflare.com` URL; setup reads it from the logs).
+Hostname modes: own/friend domain (profile `tunnel`), `spark.localhost` (laptop only, plain http,
+port 80), quick tunnel (random public `trycloudflare.com` address, setup reads it from the logs), or
+no hostname (Cosmos only; the installer then does not start FileBrowser).
 
 ## State of the work (2026-10-29)
 
@@ -91,54 +89,39 @@ Done and tested:
 | Cosmos API client | `cosmos.py` | Paths and payloads verified in Cosmos v0.23.4 source; read calls confirmed against a live Cosmos |
 | FileBrowser config rendering | `filebrowser.py`, `config/filebrowser/config.yaml` | Strict placeholder rendering; config written 0600, uid 1000 |
 | Core compose | `compose.yaml` | `init`, `cosmos`, `filebrowser`, `spark` (profile `cli`), `tunnel`, `quick-tunnel`. Ran live (init + Cosmos healthy) |
-| `spark setup` | `commands/setup.py`, `tests/test_setup.py`, `tests/test_docker_api.py` | Ran live on Linux 2026-10-29 (project `spark-dev`): first run and zero-change re-run in local-only mode and with a hostname (`spark-dev.test`, no tunnel); live network-alias change; FileBrowser healthy, `/files` served by Cosmos, full Files sign-in through Cosmos verified in laptop-only mode (`spark.localhost`, port 80): Home writable, Shared read-only. Quick-tunnel only with fakes. |
+| `spark setup` | `commands/setup.py` | Live on Linux: first run and zero-change re-run in local-only mode, with a hostname, and laptop-only (`spark.localhost`); hostname change; live network-alias change; restarts Cosmos after registering the OpenID client (Cosmos loads clients only at start). Quick tunnel only with fakes. |
+| `spark user` | `commands/user.py` | Live: add → invite → register → Files sign-in, list (MFA from Cosmos's `auth.db`, columns verified in `utils/store_schema.go`), remove with owner/last-admin guards |
+| `spark doctor` | `commands/doctor.py` | Live: all checks pass on a healthy install; FAILs (exit 1) when a safety key is off (tested on a copy of the config). Checks table in `docs/development.md` |
+| `spark backup` / `restore` | `commands/backup.py` | Live round trip; hostile archives refused before anything is stopped; owners kept; safety keys put back; archive owned like `SPARK_DATA` |
+| `spark tunnel` | `cloudflare.py`, `commands/tunnel.py` | Endpoints checked in Cloudflare's API docs; tested with a fake API only, **never run against a real account yet** |
+| Scripts | `scripts/install.sh`, `uninstall.sh`, `always-on.sh` | install / re-run / uninstall / purge live on a throwaway copy; `always-on.sh` only with `--dry-run` |
+| Smoke test + CI | `tests/smoke/`, `.github/workflows/ci.yml` | `tests/smoke/run.sh` passes locally (~2 min, project `spark-e2e`, no published port); CI not yet seen running on GitHub |
+| Docs | `docs/guides/*`, `docs/architecture.md` | 5 guides; 9 Mermaid diagrams, each rendered once |
 
-Open issue: in local-only mode (no `SPARK_HOSTNAME`) FileBrowser restarts in a loop, because the
-placeholder config points its OpenID issuer at `http://localhost` (itself) and FileBrowser exits when
-discovery fails. Harmless but noisy; needs a decision (see the task 1 report).
-Use `SPARK_HOSTNAME=spark.localhost` with `SPARK_HTTP_PORT=80` for a working laptop-only install.
+Verified results, including the Files permission checks, are in `docs/design.md`, "Spike results".
 
-Open issue: the owner gets FileBrowser's share permission only at the next FileBrowser start after
-their first sign-in (`auth.adminUsername` is applied at start). Look at it in task 2.
+Open issues:
 
-Written, not tested yet:
-
-- `commands/user.py`: `add|list|remove`. **Needs `tests/test_user.py`.** Its `read_mfa` reads
-  Cosmos's SQLite `auth.db` read-only; the table and column names (`users`, `mfa_key`,
-  `was_2fa_verified`) are unverified, so check them in Cosmos's store code or drop the MFA column.
-
-Not started: `commands/doctor.py`, `commands/backup.py` (backup + restore), `cloudflare.py` +
-`commands/tunnel.py` (stubs raise "not implemented"), `compose/` add-ons, `scripts/` installer,
-`docs/guides/`, `tests/smoke` end-to-end test, CI, updated architecture diagrams, `docs/roadmap.md`.
+- The owner gets FileBrowser's share right only at the next FileBrowser start after their first
+  sign-in (`auth.adminUsername` is applied at start). Documented workaround: restart `filebrowser`
+  once. A proper fix is being researched.
+- Not yet tested through Cloudflare (needs the owner's OK, it is public): the quick tunnel, the
+  100 MB request limit, HTTPS cookies, real client IPs in SmartShield, `spark tunnel` against a real
+  account.
+- If the network drops right as first-run setup answers, Cosmos is set up but SPARK never saved the
+  admin token; recovery is in `docs/guides/troubleshooting.md`, "Lost admin token".
 
 ## Next tasks, in order
 
-Finish each one with tests before starting the next.
+Tasks 1–9 of the original plan are done (see the table). Finish each one with tests, commit it
+locally, and let the owner check it before starting the next.
 
-1. **`spark setup` tests**, then a live run on a throwaway project (`-p spark-dev`, port 18080):
-   first run, re-run (no changes), quick-tunnel profile. Fix what breaks.
-2. **FileBrowser end to end** with the quick tunnel: guest signs in via Cosmos, gets `Home/<name>`,
-   cannot write to `Shared`, admin creates a share link that works without a session, a 120 MB upload
-   goes through in chunks. Record the results in `docs/design.md`, "Spike results".
-3. **`spark user`** tests and a live invite: `user add` → open the invite link → set a password →
-   sign in to Files.
-4. **`spark doctor`**: read-only checks with OK/WARN/FAIL lines and exit codes (contract table in
-   `docs/development.md`). It must FAIL when the Cosmos safety keys are off.
-5. **`spark backup` / `spark restore`**: stop cosmos+filebrowser, tar the volumes and state with a
-   manifest, always restart in `finally`, tar-slip-safe restore.
-6. **`spark tunnel new|list|remove`** + `cloudflare.py` (Cloudflare API: create tunnel with
-   `config_src: cloudflare`, PUT ingress ending in `http_status:404`, proxied CNAME to
-   `<id>.cfargotunnel.com`, GET token; optional Always Use HTTPS zone setting).
-7. **`scripts/install.sh`** (checks Docker/compose, writes `.env`, follows the startup order below),
-   `scripts/uninstall.sh` (keeps volumes unless `--purge`), `scripts/always-on.sh` (logind
-   `HandleLidSwitch=ignore`, `systemctl enable docker`).
-8. **`tests/smoke`** end-to-end runner + **CI** (`.github/workflows/ci.yml`: unit tests in the dev
-   image, `docker compose config` for profile combinations, shellcheck).
-9. **Docs**: user guides (getting started, domains, access control, always-on, troubleshooting) and
-   detailed Mermaid diagrams in `docs/architecture.md` (system context, containers/volumes/network,
-   trust boundaries, sequences for install, OpenID sign-in, share link, chunked upload, friend
-   onboarding, backup/restore). Render each diagram once to check it parses.
-10. Add-ons in `compose/` (Jellyfin LAN/Tailscale only, Tailscale, Nextcloud) and `docs/roadmap.md`.
+1. **Add-ons** in `compose/`: Jellyfin (LAN and Tailscale only, never the tunnel), Tailscale,
+   Nextcloud (Postgres + Redis, OpenID against Cosmos, own flat hostname), and `docs/roadmap.md`.
+2. **Owner share right** in FileBrowser without the manual restart.
+3. **Cloudflare checks** with the owner's OK: quick tunnel end to end, then `spark tunnel` on the
+   owner's domain.
+4. **Windows** via WSL2 + Docker Engine (design decision of 2026-10-29), after Linux is stable.
 
 ## Startup order (nothing public before the admin exists)
 

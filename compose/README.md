@@ -1,12 +1,12 @@
 # compose/ — optional add-ons
 
-Each file is a self-contained add-on included from the root `compose.yaml` and gated by a
-[Compose profile](https://docs.docker.com/compose/how-tos/profiles/). Turn add-ons on with
+The core stack (Cosmos, FileBrowser, the Cloudflare tunnel and the `spark` CLI) is in the root
+`compose.yaml`. Add-ons will live here, one file each, gated by a
+[Compose profile](https://docs.docker.com/compose/how-tos/profiles/) that you turn on with
 `COMPOSE_PROFILES` in `.env`.
 
-| File | Profile | Adds |
-|---|---|---|
-| `tunnel.yaml` | `tunnel` / `quick-tunnel` | cloudflared with your token, or a throwaway trycloudflare.com URL |
-| `media.yaml` | `media` | Jellyfin (home network / Tailscale only — never through the Cloudflare tunnel) |
-| `nextcloud.yaml` | `nextcloud` | Nextcloud + Postgres + Redis, login via Cosmos OpenID |
-| `tailscale.yaml` | `tailscale` | Tailscale sidecar for private remote access to media |
+| File | Profile | Adds | Status |
+|---|---|---|---|
+| `media.yaml` | `media` | Jellyfin, on the home network and Tailscale only, never through the tunnel | planned |
+| `tailscale.yaml` | `tailscale` | Tailscale for private remote access | planned |
+| `nextcloud.yaml` | `nextcloud` | Nextcloud + PostgreSQL + Redis, sign-in through Cosmos | planned |
