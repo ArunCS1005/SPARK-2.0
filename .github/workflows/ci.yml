@@ -37,7 +37,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - run: docker run --rm -v "$PWD:/mnt:ro" koalaman/shellcheck:v0.10.0 /mnt/scripts/*.sh /mnt/tests/smoke/run.sh
+      # The runner's shell expands the glob, so pass paths relative to the repository and start
+      # the container in the mounted copy (-w): "/mnt/scripts/*.sh" would not match on the host.
+      - run: docker run --rm -v "$PWD:/mnt:ro" -w /mnt koalaman/shellcheck:v0.10.0 scripts/*.sh tests/smoke/run.sh
 
   smoke:
     name: End-to-end smoke test
