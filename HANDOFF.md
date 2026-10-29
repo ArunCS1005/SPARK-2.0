@@ -46,7 +46,7 @@ First steps after cloning:
 ```bash
 cd SPARK
 docker build --target dev -t spark-cli-dev tools/spark-cli
-docker run --rm -v "$PWD:/repo" spark-cli-dev        # expect: 184 passed, ruff clean
+docker run --rm -v "$PWD:/repo" spark-cli-dev        # expect: 189 passed, ruff clean
 tests/smoke/run.sh                                   # optional, ~2 min: whole stack end to end
 ```
 
@@ -94,7 +94,7 @@ Done and tested:
 | `spark doctor` | `commands/doctor.py` | Live: all checks pass on a healthy install; FAILs (exit 1) when a safety key is off (tested on a copy of the config). Checks table in `docs/development.md` |
 | `spark backup` / `restore` | `commands/backup.py` | Live round trip; hostile archives refused before anything is stopped; owners kept; safety keys put back; archive owned like `SPARK_DATA` |
 | `spark tunnel` | `cloudflare.py`, `commands/tunnel.py` | Endpoints checked in Cloudflare's API docs; tested with a fake API only, **never run against a real account yet** |
-| Scripts | `scripts/install.sh`, `uninstall.sh`, `always-on.sh` | install / re-run / uninstall / purge live on a throwaway copy; `always-on.sh` only with `--dry-run` |
+| Scripts | `scripts/install.sh`, `uninstall.sh`, `always-on.sh` | install / re-run / uninstall / purge live on a throwaway copy; quick-tunnel install live (fresh, re-run, and re-run after the tunnel got a new address); `always-on.sh` only with `--dry-run` |
 | Smoke test + CI | `tests/smoke/`, `.github/workflows/ci.yml` | `tests/smoke/run.sh` passes locally (~2 min, project `spark-e2e`, no published port); CI not yet seen running on GitHub |
 | Docs | `docs/guides/*`, `docs/architecture.md` | 5 guides; 9 Mermaid diagrams, each rendered once |
 

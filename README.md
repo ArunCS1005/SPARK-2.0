@@ -35,19 +35,22 @@ SPARK/
 └── README.md
 ```
 
-## Quick start (Linux)
+## Try it (Linux)
 
-You need Docker Engine with the Compose plugin 2.24 or newer.
+**New here? Follow [Try SPARK on your laptop](docs/guides/try-spark.md)**: install Docker, run one
+command, choose an owner account, and get a public address you can open from your phone. About 15
+minutes.
 
 ```bash
-git clone https://github.com/ArunCS1005/SPARK-2.0.git SPARK
-cd SPARK
+git clone https://github.com/ArunCS1005/SPARK-2.0.git spark
+cd spark
 ./scripts/install.sh
 ```
 
-The installer asks where to keep files and how people reach SPARK (your own domain, this laptop
-only at `http://spark.localhost`, or a temporary test address), then asks you to choose the owner
-account. Full walk-through: [`docs/guides/getting-started.md`](docs/guides/getting-started.md).
+The installer asks where to keep files and how people reach SPARK (a temporary public address for
+testing, your own domain, or this laptop only at `http://spark.localhost`), then asks you to choose
+the owner account and prints the address. Setting up your own domain:
+[`docs/guides/getting-started.md`](docs/guides/getting-started.md).
 
 ## Everyday use
 
@@ -60,6 +63,7 @@ docker compose run --rm spark tunnel new <name>   # owner: an address on your do
 
 ## Guides
 
+- [Try SPARK on your laptop](docs/guides/try-spark.md) (start here)
 - [Getting started](docs/guides/getting-started.md)
 - [Domains and tunnels](docs/guides/domains.md)
 - [Accounts, folders and share links](docs/guides/access-control.md)

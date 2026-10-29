@@ -2,7 +2,9 @@
 containers, restart/stop/start them, read logs, inspect the project network."""
 
 import json
+import re
 import struct
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -85,13 +87,22 @@ class DockerClient:
     def start(self, container_id: str) -> None:
         self._request("POST", f"/containers/{container_id}/start")
 
-    def logs(self, container_id: str, tail: int = 500) -> str:
-        response = self._request(
-            "GET",
-            f"/containers/{container_id}/logs",
-            params={"stdout": "1", "stderr": "1", "tail": str(tail)},
-        )
+    def logs(self, container_id: str, tail: int = 500, since: int = 0) -> str:
+        """The last `tail` log lines, only those written at or after `since` (UNIX time) if given.
+        A restarted container's log still holds its earlier runs."""
+        params = {"stdout": "1", "stderr": "1", "tail": str(tail)}
+        if since:
+            params["since"] = str(since)
+        response = self._request("GET", f"/containers/{container_id}/logs", params=params)
         return demultiplex(response.content)
+
+    def started_at(self, container_id: str) -> int:
+        """When the container last started, as UNIX time; 0 if it never did."""
+        value = self.inspect(container_id).get("State", {}).get("StartedAt") or ""
+        match = re.match(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d", value)
+        if not match or value.startswith("0001-"):
+            return 0
+        return int(datetime.fromisoformat(match.group(0)).replace(tzinfo=UTC).timestamp())
 
     def network(self, name: str) -> dict[str, Any] | None:
         response = self.http.get(f"/networks/{name}")

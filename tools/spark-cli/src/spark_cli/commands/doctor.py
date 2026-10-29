@@ -222,13 +222,10 @@ class Doctor:
             )
 
     def quick_tunnel_hostname(self) -> str:
-        from spark_cli.commands.setup import QUICK_TUNNEL_URL
+        from spark_cli.commands.setup import quick_tunnel_address
 
         container = self.docker.find_container("quick-tunnel")
-        if container is None:
-            return ""
-        match = QUICK_TUNNEL_URL.search(self.docker.logs(container["Id"], tail=200))
-        return match.group(1) if match else ""
+        return quick_tunnel_address(self.docker, container["Id"]) if container else ""
 
     def check_files_wiring(self) -> None:
         config = self.cosmos_config

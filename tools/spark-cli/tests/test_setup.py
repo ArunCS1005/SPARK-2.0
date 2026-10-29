@@ -200,9 +200,13 @@ class FakeDocker:
         self.added_aliases.append(alias)
         return True
 
-    def logs(self, container_id, tail=500):
+    def logs(self, container_id, tail=500, since=0):
         assert container_id == "quick-tunnel-id"
+        assert since == 1_700_000_000  # only this run of the tunnel
         return self.log_text
+
+    def started_at(self, container_id):
+        return 1_700_000_000
 
     def restart(self, container_id, timeout=20):
         self.restarted.append(container_id)
@@ -628,3 +632,35 @@ def test_unanswered_filebrowser_is_a_warning(setup_settings, docker, server, cap
     assert run_setup(setup_settings(), docker, server) == 0
     assert "owner's Files rights were not checked" in capsys.readouterr().out
     assert docker.files.users == {}
+
+
+def test_typed_owner_details_are_asked_again_when_refused(
+    setup_settings, docker, server, monkeypatch, capsys
+):
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    names = iter(["ab", "Owner1"])
+    monkeypatch.setattr("builtins.input", lambda prompt: next(names))
+    passwords = iter(["short", "short", PASSWORD, PASSWORD])
+    monkeypatch.setattr("getpass.getpass", lambda prompt: next(passwords))
+    run_setup(setup_settings(admin_user="", admin_password=""), docker, server)
+    assert server.setup_payload["nickname"] == "Owner1"
+    assert server.setup_payload["password"] == PASSWORD
+    out = capsys.readouterr().out
+    assert "'ab' is not a valid account name. Please try again." in out
+    assert "needs 9 to 128 characters" in out
+
+
+def test_typed_owner_details_give_up_after_three_tries(setup_settings, docker, server, monkeypatch):
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda prompt: "x")
+    with pytest.raises(SparkError, match="not a valid account name"):
+        run_setup(setup_settings(admin_user=""), docker, server)
+    assert server.setup_payload is None
+
+
+def test_quick_tunnel_uses_the_address_of_its_latest_run(setup_settings, server):
+    old, new = "old-name-1.trycloudflare.com", "new-name-2.trycloudflare.com"
+    docker = FakeDocker(logs=f"INF |  https://{old}  |\nINF |  https://{new}  |\n")
+    settings = setup_settings(hostname="", compose_profiles=("quick-tunnel",))
+    run_setup(settings, docker, server)
+    assert server.setup_payload["hostname"] == new

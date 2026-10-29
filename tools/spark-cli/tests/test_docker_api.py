@@ -65,3 +65,29 @@ def test_add_network_alias_handles_no_aliases():
     docker, requests = docker_with({"spark_default": {"Aliases": None}})
     assert docker.add_network_alias("c1", "spark.example.com") is True
     assert json.loads(requests[-1].content)["EndpointConfig"] == {"Aliases": ["spark.example.com"]}
+
+
+def test_started_at_and_logs_since():
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        if request.url.path.endswith("/json"):
+            state = {"StartedAt": "2026-10-29T08:04:59.964464061Z"}
+            return httpx.Response(200, json={"State": state})
+        return httpx.Response(200, content=b"plain log\n")
+
+    docker = DockerClient(httpx.Client(transport=httpx.MockTransport(handler), base_url="http://d"))
+    assert docker.started_at("c1") == 1793261099
+    assert docker.logs("c1", tail=10, since=1793261099) == "plain log\n"
+    assert seen[-1].url.params["since"] == "1793261099"
+    docker.logs("c1")
+    assert "since" not in seen[-1].url.params
+
+
+def test_started_at_of_a_container_that_never_ran():
+    def handler(request):
+        return httpx.Response(200, json={"State": {"StartedAt": "0001-01-01T00:00:00Z"}})
+
+    docker = DockerClient(httpx.Client(transport=httpx.MockTransport(handler), base_url="http://d"))
+    assert docker.started_at("c1") == 0

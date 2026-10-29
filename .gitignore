@@ -23,3 +23,6 @@ build/
 Thumbs.db
 .vscode/
 .idea/
+
+# Installer output
+install.log

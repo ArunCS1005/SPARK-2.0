@@ -25,10 +25,12 @@ The installer asks:
 
 1. **Where to keep files** (default `~/spark-data`). Everyone's files live in normal folders there.
 2. **How people reach SPARK:**
-   - **Your own domain or a friend's token**: e.g. `spark.yourdomain.com`, reachable from anywhere.
-   - **This laptop only**: `http://spark.localhost`, good for trying it out. It uses port 80.
-   - **A temporary test address**: a random `trycloudflare.com` address. Anyone who learns it can
-     reach your SPARK while it runs, so use it only for short tests.
+   1. **A temporary public address** (the suggestion): a random `trycloudflare.com` address.
+      Anyone who learns it can reach your SPARK's sign-in page while it runs, so use it for
+      testing. It changes when the laptop restarts; run the installer again for the new one.
+      Step-by-step for this mode: [try-spark.md](try-spark.md).
+   2. **Your own domain or a friend's token**: e.g. `spark.yourdomain.com`, reachable from anywhere.
+   3. **This laptop only**: `http://spark.localhost`. It uses port 80.
 3. **Your time zone and country.**
 
 Then it starts everything and asks you to choose the **owner account** name and password. The

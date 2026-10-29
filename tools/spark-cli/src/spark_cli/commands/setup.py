@@ -128,10 +128,10 @@ class Setup:
             return self.settings.hostname
         container = self.docker.require_container("quick-tunnel")["Id"]
         for _ in range(30):
-            match = QUICK_TUNNEL_URL.search(self.docker.logs(container, tail=200))
-            if match:
-                output.ok(f"Quick tunnel: https://{match.group(1)} (changes when it restarts)")
-                return match.group(1)
+            address = quick_tunnel_address(self.docker, container)
+            if address:
+                output.ok(f"Quick tunnel: https://{address} (changes when it restarts)")
+                return address
             self.sleep(2)
         raise SparkError(
             "The quick tunnel has not printed its URL yet.",
@@ -155,10 +155,11 @@ class Setup:
             )
 
     def first_run(self, cosmos: CosmosClient, args: argparse.Namespace, hostname: str):
-        nickname = validate_nickname(args.admin_user or self.settings.admin_user or ask_name())
+        nickname = until_valid(
+            validate_nickname, args.admin_user or self.settings.admin_user, ask_name
+        )
         email = args.admin_email or self.settings.admin_email
-        password = self.settings.admin_password or ask_password()
-        validate_password(password)
+        password = until_valid(validate_password, self.settings.admin_password, ask_password)
 
         token = cosmos.setup(nickname=nickname, password=password, email=email, hostname=hostname)
         self.state.set("cosmos.admin_token", token)
@@ -296,6 +297,14 @@ class Setup:
         return f"http://localhost:{self.settings.http_port}"
 
 
+def quick_tunnel_address(docker: DockerClient, container_id: str) -> str:
+    """The address the quick tunnel printed since its latest start, or "". Each restart prints a
+    new one, and the log keeps the old ones."""
+    since = docker.started_at(container_id)
+    found = QUICK_TUNNEL_URL.findall(docker.logs(container_id, tail=500, since=since))
+    return found[-1] if found else ""
+
+
 def files_route(hostname: str) -> dict[str, Any]:
     return {
         "Name": FILES_ROUTE,
@@ -330,7 +339,7 @@ def validate_nickname(name: str | None) -> str:
     return name
 
 
-def validate_password(password: str) -> None:
+def validate_password(password: str) -> str:
     problems = []
     if not 9 <= len(password) <= 128:
         problems.append("9 to 128 characters")
@@ -345,6 +354,22 @@ def validate_password(password: str) -> None:
         problems.append(f"one of {PASSWORD_SPECIALS}")
     if problems:
         raise SparkError("The owner password needs " + ", ".join(problems) + ".")
+    return password
+
+
+def until_valid(check: Callable[[str], str], given: str | None, ask: Callable[[], str]) -> str:
+    """A value given on the command line or in the environment is checked once. One typed in a
+    terminal is asked again (three tries) when it is refused, instead of ending the install."""
+    if given:
+        return check(given)
+    for attempt in range(3):
+        try:
+            return check(ask())
+        except SparkError as exc:
+            if attempt == 2 or not sys.stdin.isatty():
+                raise
+            output.warn(exc.message + " Please try again.")
+    raise AssertionError("unreachable")
 
 
 def ask_name() -> str:
@@ -361,6 +386,8 @@ def ask_password() -> str:
             hint="Set SPARK_ADMIN_PASSWORD for this run (docker compose run -e ...), "
             "or run in a terminal to be asked.",
         )
+    output.info("Choose the owner password: at least 9 characters, with an uppercase letter,")
+    output.info("a lowercase letter, a digit and a symbol. Typing is hidden.")
     password = getpass.getpass("Owner password: ")
     if getpass.getpass("Repeat it: ") != password:
         raise SparkError("The passwords do not match.")

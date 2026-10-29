@@ -33,8 +33,11 @@ class FakeDocker:
             raise SparkError("Cannot reach the Docker engine.")
         return self.containers.get(service)
 
-    def logs(self, container_id, tail=500):
+    def logs(self, container_id, tail=500, since=0):
         return self.log_text
+
+    def started_at(self, container_id):
+        return 0
 
 
 def container(image, healthy=True, state="running"):
