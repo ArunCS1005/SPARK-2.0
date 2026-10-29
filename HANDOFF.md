@@ -115,13 +115,13 @@ Open issues:
 Tasks 1–9 of the original plan are done (see the table). Finish each one with tests, commit it
 locally, and let the owner check it before starting the next.
 
-1. **Add-ons** in `compose/`: Jellyfin (LAN and Tailscale only, never the tunnel), Tailscale,
-   Nextcloud (Postgres + Redis, OpenID against Cosmos, own flat hostname), and `docs/roadmap.md`.
-2. **Domain tunnel and security**: research and test `spark tunnel` on the owner's domain, the
-   `http://` sign-in step, HSTS and cookie flags.
-3. **Releases**: publish the `spark-cli` image and tagged releases on GitHub (plan in
-   `docs/release.md`).
-4. **Windows** via WSL2 + Docker Engine (design decision of 2026-10-29), after Linux is stable.
+1. **Domain tunnel and security** (research done: `docs/research/cloudflare-security.md`):
+   `spark tunnel harden` (Always Use HTTPS, HSTS, minimum TLS, a Transform Rule removing incoming
+   `X-Forwarded-For`), a live test with the owner's OK, guide updates.
+2. **First release** (plan: `docs/release.md`): licence (owner's choice), `release.yml`, image on
+   GHCR for amd64 and arm64, release installer and `update.sh`.
+3. **Windows** via WSL2 + Docker Engine (design decision of 2026-10-29), after Linux is stable.
+4. **Add-ons in a later release** (Jellyfin, Tailscale, Nextcloud): `docs/roadmap.md`.
 
 ## Startup order (nothing public before the admin exists)
 

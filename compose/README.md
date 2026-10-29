@@ -7,6 +7,8 @@ The core stack (Cosmos, FileBrowser, the Cloudflare tunnel and the `spark` CLI) 
 
 | File | Profile | Adds | Status |
 |---|---|---|---|
-| `media.yaml` | `media` | Jellyfin, on the home network and Tailscale only, never through the tunnel | planned |
-| `tailscale.yaml` | `tailscale` | Tailscale for private remote access | planned |
-| `nextcloud.yaml` | `nextcloud` | Nextcloud + PostgreSQL + Redis, sign-in through Cosmos | planned |
+| `media.yaml` | `media` | Jellyfin, on the home network and Tailscale only, never through the tunnel | later release |
+| `tailscale.yaml` | `tailscale` | Tailscale for private remote access | later release |
+| `nextcloud.yaml` | `nextcloud` | Nextcloud + PostgreSQL + Redis, sign-in through Cosmos | later release |
+
+What is known about them so far: [`docs/roadmap.md`](../docs/roadmap.md).

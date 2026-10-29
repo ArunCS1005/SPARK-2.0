@@ -21,12 +21,12 @@ this file in the same change.
 | `tunnel` | `tunnel` | `cloudflare/cloudflared:${CLOUDFLARED_VERSION}` | `tunnel --no-autoupdate run`, token from `TUNNEL_TOKEN`. |
 | `quick-tunnel` | `quick-tunnel` | `cloudflare/cloudflared:${CLOUDFLARED_VERSION}` | `tunnel --no-autoupdate --url http://cosmos:80`; random `*.trycloudflare.com` URL printed in its logs. Testing only. |
 | `spark` | `cli` | `spark-cli:local` | Run on demand: `docker compose run --rm spark <command>`. |
-| `jellyfin` | `media` | `jellyfin/jellyfin:${JELLYFIN_VERSION}` | Add-on, `compose/media.yaml`. Never routed through the tunnel. |
-| `tailscale` | `tailscale` | `tailscale/tailscale:${TAILSCALE_VERSION}` | Add-on, `compose/tailscale.yaml`. |
-| `nextcloud`, `nextcloud-db`, `nextcloud-redis` | `nextcloud` | `nextcloud:${NEXTCLOUD_VERSION}` … | Add-on, `compose/nextcloud.yaml`. |
+| `jellyfin` | `media` | `jellyfin/jellyfin:${JELLYFIN_VERSION}` | Add-on, later release (`compose/media.yaml`). Never routed through the tunnel. |
+| `tailscale` | `tailscale` | `tailscale/tailscale:${TAILSCALE_VERSION}` | Add-on, later release (`compose/tailscale.yaml`). |
+| `nextcloud`, `nextcloud-db`, `nextcloud-redis` | `nextcloud` | `nextcloud:${NEXTCLOUD_VERSION}` … | Add-on, later release (`compose/nextcloud.yaml`). |
 
-Named volumes: `cosmos-config`, `filebrowser-data`, `spark-state`, plus add-on volumes
-(`jellyfin-config`, `jellyfin-cache`, `tailscale-state`, `nextcloud-html`, `nextcloud-db`).
+Named volumes: `cosmos-config`, `filebrowser-data`, `spark-state`; add-ons (later release) will
+add `jellyfin-config`, `jellyfin-cache`, `tailscale-state`, `nextcloud-html`, `nextcloud-db`.
 User files live only in the `${SPARK_DATA}` bind mount.
 
 ## Cosmos safety: the seed config
